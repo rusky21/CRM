@@ -35,8 +35,15 @@ public class ClientsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<Client>> AddOrUpdateClient([FromBody] Client client)
     {
-        var saved = await _clientService.AddOrUpdateClientAsync(client);
-        return Ok(saved);
+        try
+        {
+            var saved = await _clientService.AddOrUpdateClientAsync(client);
+            return Ok(saved);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message, details = ex.InnerException?.Message ?? ex.ToString() });
+        }
     }
 
     [HttpDelete("{id:int}")]

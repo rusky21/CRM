@@ -5,6 +5,8 @@ using StudioCRM.Data;
 using StudioCRM.Data.Context;
 using StudioCRM.Data.Services;
 
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Database Configuration
@@ -68,6 +70,27 @@ using (var scope = app.Services.CreateScope())
         logger.LogError(ex, "Database auto-initialization error: {Message}", ex.Message);
     }
 }
+
+app.UseExceptionHandler(exceptionHandlerApp =>
+{
+    exceptionHandlerApp.Run(async context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        context.Response.ContentType = "application/json";
+
+        var exceptionHandlerPathFeature =
+            context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerPathFeature>();
+
+        var ex = exceptionHandlerPathFeature?.Error;
+        var result = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            error = ex?.Message,
+            details = ex?.InnerException?.Message ?? ex?.ToString()
+        });
+
+        await context.Response.WriteAsync(result);
+    });
+});
 
 app.UseCors();
 app.MapControllers();

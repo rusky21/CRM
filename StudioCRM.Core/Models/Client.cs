@@ -9,7 +9,7 @@ public class Client
     public string? Email { get; set; }
     public string? Telegram { get; set; }
     public string? Notes { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public List<Order> Orders { get; set; } = new();
 }

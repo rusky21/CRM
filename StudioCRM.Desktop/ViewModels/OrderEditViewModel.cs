@@ -372,26 +372,33 @@ public partial class OrderEditViewModel : ViewModelBase
     {
         if (string.IsNullOrWhiteSpace(QuickClientName)) return;
 
-        var client = new Client
+        try
         {
-            Name = QuickClientName.Trim(),
-            ContactPerson = QuickClientPerson?.Trim(),
-            Phone = QuickClientPhone?.Trim(),
-            Email = QuickClientEmail?.Trim(),
-            Telegram = QuickClientTelegram?.Trim(),
-            CreatedAt = DateTime.Now
-        };
+            var client = new Client
+            {
+                Name = QuickClientName.Trim(),
+                ContactPerson = QuickClientPerson?.Trim(),
+                Phone = QuickClientPhone?.Trim(),
+                Email = QuickClientEmail?.Trim(),
+                Telegram = QuickClientTelegram?.Trim(),
+                CreatedAt = DateTime.UtcNow
+            };
 
-        var created = await _clientService.AddOrUpdateClientAsync(client);
-        AvailableClients.Add(created);
-        SelectedClient = created;
+            var created = await _clientService.AddOrUpdateClientAsync(client);
+            AvailableClients.Add(created);
+            SelectedClient = created;
 
-        QuickClientName = string.Empty;
-        QuickClientPerson = null;
-        QuickClientPhone = null;
-        QuickClientEmail = null;
-        QuickClientTelegram = null;
-        IsQuickClientOpen = false;
+            QuickClientName = string.Empty;
+            QuickClientPerson = null;
+            QuickClientPhone = null;
+            QuickClientEmail = null;
+            QuickClientTelegram = null;
+            IsQuickClientOpen = false;
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Ошибка добавления клиента: {ex.Message}";
+        }
     }
 
     [RelayCommand]

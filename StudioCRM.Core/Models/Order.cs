@@ -21,7 +21,7 @@ public class Order
     public string? DesignUrl { get; set; }
     public string? WorkBoardUrl { get; set; }
     public string? Notes { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public List<OrderItem> Items { get; set; } = new();
     public List<OrderStage> Stages { get; set; } = new();

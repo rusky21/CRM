@@ -36,8 +36,15 @@ public class OrdersController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<Order>> CreateOrder([FromBody] Order order)
     {
-        var created = await _orderService.CreateOrderAsync(order);
-        return CreatedAtAction(nameof(GetOrderById), new { id = created.Id }, created);
+        try
+        {
+            var created = await _orderService.CreateOrderAsync(order);
+            return CreatedAtAction(nameof(GetOrderById), new { id = created.Id }, created);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message, details = ex.InnerException?.Message ?? ex.ToString() });
+        }
     }
 
     [HttpPut("{id:int}")]

@@ -10,7 +10,7 @@ public class Payment
 
     public decimal Amount { get; set; }
     public PaymentType PaymentType { get; set; } = PaymentType.BankTransfer;
-    public DateTime PaymentDate { get; set; } = DateTime.Now;
+    public DateTime PaymentDate { get; set; } = DateTime.UtcNow;
     public string? Notes { get; set; }
     public bool IsConfirmed { get; set; } = true;
 }

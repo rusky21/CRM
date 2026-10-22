@@ -48,7 +48,7 @@ public class ClientService : IClientService
 
         if (client.Id == 0)
         {
-            client.CreatedAt = DateTime.Now;
+            client.CreatedAt = DateTime.UtcNow;
             context.Clients.Add(client);
         }
         else

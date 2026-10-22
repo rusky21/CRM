@@ -14,6 +14,11 @@ public class StudioDbContext : DbContext
     public DbSet<OrderStage> OrderStages => Set<OrderStage>();
     public DbSet<Payment> Payments => Set<Payment>();
 
+    static StudioDbContext()
+    {
+        AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+    }
+
     public StudioDbContext()
     {
     }

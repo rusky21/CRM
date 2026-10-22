@@ -59,7 +59,7 @@ public class OrderService : IOrderService
             order.OrderNumber = $"ORD-{year}-{(countThisYear + 1):D3}";
         }
 
-        order.CreatedAt = DateTime.Now;
+        order.CreatedAt = DateTime.UtcNow;
 
         foreach (var item in order.Items)
         {

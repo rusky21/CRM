@@ -95,4 +95,76 @@ public class ModelCalculationTests
         var backDate = (DateTime)convertedBack;
         Assert.Equal(testDate, backDate);
     }
+
+    [Fact]
+    public void Order_EmptyItemsAndPayments_HasZeroTotals()
+    {
+        var order = new Order();
+        Assert.Equal(0m, order.TotalCost);
+        Assert.Equal(0m, order.PaidAmount);
+        Assert.Equal(0m, order.RemainingDebt);
+        Assert.Equal(0, order.ProgressPercentage);
+    }
+
+    [Fact]
+    public void Order_ProgressPercentage_CalculatesBasedOnStages()
+    {
+        var order = new Order
+        {
+            Stages = new List<OrderStage>
+            {
+                new() { Title = "Этап 1", Status = "Completed" },
+                new() { Title = "Этап 2", Status = "Completed" },
+                new() { Title = "Этап 3", Status = "Pending" },
+                new() { Title = "Этап 4", Status = "Pending" }
+            }
+        };
+
+        Assert.Equal(50, order.ProgressPercentage);
+
+        // Complete all
+        order.Stages[2].Status = "Completed";
+        order.Stages[3].Status = "Completed";
+        Assert.Equal(100, order.ProgressPercentage);
+    }
+
+    [Fact]
+    public void CurrencyFormatConverter_FormatsCorrectly()
+    {
+        var converter = StudioCRM.Desktop.Converters.CurrencyFormatConverter.Instance;
+
+        var result = converter.Convert(150000m, typeof(string), null, System.Globalization.CultureInfo.InvariantCulture);
+        Assert.NotNull(result);
+        Assert.Contains("150", result.ToString());
+        Assert.Contains("₽", result.ToString());
+
+        var zero = converter.Convert(0m, typeof(string), null, System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Equal("0 ₽", zero);
+
+        var nullVal = converter.Convert(null, typeof(string), null, System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Equal("0 ₽", nullVal);
+    }
+
+    [Fact]
+    public void OrderStatusToStringConverter_TranslatesAllStatuses()
+    {
+        var converter = StudioCRM.Desktop.Converters.OrderStatusToStringConverter.Instance;
+
+        Assert.Equal("Новый", converter.Convert(OrderStatus.New, typeof(string), null, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal("В работе", converter.Convert(OrderStatus.InProgress, typeof(string), null, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal("Тестирование", converter.Convert(OrderStatus.Testing, typeof(string), null, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal("Сдан", converter.Convert(OrderStatus.Completed, typeof(string), null, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal("Отменен", converter.Convert(OrderStatus.Cancelled, typeof(string), null, System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
+    public void PaymentTypeToStringConverter_TranslatesAllPaymentTypes()
+    {
+        var converter = StudioCRM.Desktop.Converters.PaymentTypeToStringConverter.Instance;
+
+        Assert.Equal("Безналичный (Р/С)", converter.Convert(PaymentType.BankTransfer, typeof(string), null, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal("Банковская карта", converter.Convert(PaymentType.Card, typeof(string), null, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal("Наличные", converter.Convert(PaymentType.Cash, typeof(string), null, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal("Криптовалюта (USDT)", converter.Convert(PaymentType.Crypto, typeof(string), null, System.Globalization.CultureInfo.InvariantCulture));
+    }
 }

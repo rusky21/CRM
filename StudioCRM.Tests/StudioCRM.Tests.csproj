@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -23,6 +23,7 @@
     <ProjectReference Include="..\StudioCRM.Core\StudioCRM.Core.csproj" />
     <ProjectReference Include="..\StudioCRM.Data\StudioCRM.Data.csproj" />
     <ProjectReference Include="..\StudioCRM.Desktop\StudioCRM.Desktop.csproj" />
+    <ProjectReference Include="..\StudioCRM.Api\StudioCRM.Api.csproj" />
   </ItemGroup>
 
 </Project>

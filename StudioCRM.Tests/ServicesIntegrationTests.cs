@@ -183,4 +183,110 @@ public class ServicesIntegrationTests : IDisposable
         var updated = await orderService.UpdateOrderAsync(created);
         Assert.Equal(300000m, updated.TotalCost);
     }
+
+    [Fact]
+    public async Task OrderService_DeleteOrder_RemovesOrderFromDatabase()
+    {
+        var orderService = new OrderService(_context);
+        var clientService = new ClientService(_context);
+
+        var client = await clientService.AddOrUpdateClientAsync(new Client { Name = "Клиент для удаления" });
+        var order = await orderService.CreateOrderAsync(new Order
+        {
+            ClientId = client.Id,
+            Title = "Удаляемый заказ",
+            TotalCost = 50000m
+        });
+
+        var deleted = await orderService.DeleteOrderAsync(order.Id);
+        Assert.True(deleted);
+
+        var fetched = await orderService.GetOrderByIdWithDetailsAsync(order.Id);
+        Assert.Null(fetched);
+    }
+
+    [Fact]
+    public async Task OrderService_UpdateOrderStatus_ChangesStatusSuccessfully()
+    {
+        var orderService = new OrderService(_context);
+        var clientService = new ClientService(_context);
+
+        var client = await clientService.AddOrUpdateClientAsync(new Client { Name = "Клиент Статуса" });
+        var order = await orderService.CreateOrderAsync(new Order
+        {
+            ClientId = client.Id,
+            Title = "Заказ для смены статуса",
+            TotalCost = 100000m,
+            Status = OrderStatus.New
+        });
+
+        var updated = await orderService.UpdateOrderStatusAsync(order.Id, OrderStatus.InProgress);
+        Assert.True(updated);
+
+        var fetched = await orderService.GetOrderByIdWithDetailsAsync(order.Id);
+        Assert.Equal(OrderStatus.InProgress, fetched?.Status);
+    }
+
+    [Fact]
+    public async Task ClientService_DeleteClient_RemovesClient()
+    {
+        var clientService = new ClientService(_context);
+        var client = await clientService.AddOrUpdateClientAsync(new Client { Name = "Клиент для удаления" });
+
+        var deleted = await clientService.DeleteClientAsync(client.Id);
+        Assert.True(deleted);
+
+        var fetched = await clientService.GetClientByIdAsync(client.Id);
+        Assert.Null(fetched);
+    }
+
+    [Fact]
+    public async Task ClientService_DeleteClientWithOrders_ThrowsInvalidOperationException()
+    {
+        var clientService = new ClientService(_context);
+        var orderService = new OrderService(_context);
+
+        var client = await clientService.AddOrUpdateClientAsync(new Client { Name = "Клиент с заказом" });
+        await orderService.CreateOrderAsync(new Order
+        {
+            ClientId = client.Id,
+            Title = "Связанный заказ"
+        });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => clientService.DeleteClientAsync(client.Id));
+    }
+
+    [Fact]
+    public async Task DatabaseBackupService_CreateBackup_CopiesDatabaseFile()
+    {
+        var backupService = new DatabaseBackupService();
+        var tempDir = Path.Combine(Path.GetTempPath(), "CRM_Tests_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var fakeDb = Path.Combine(Directory.GetCurrentDirectory(), StudioDbContext.DefaultDbFileName);
+            bool created = false;
+            if (!File.Exists(fakeDb))
+            {
+                await File.WriteAllTextAsync(fakeDb, "fake database binary content");
+                created = true;
+            }
+
+            var backupPath = await backupService.CreateBackupAsync(tempDir);
+            Assert.True(File.Exists(backupPath));
+
+            if (created && File.Exists(fakeDb))
+            {
+                File.Delete(fakeDb);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
 }

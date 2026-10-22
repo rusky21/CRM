@@ -8,29 +8,45 @@ StudioCRM — современная кроссплатформенная CRM-с
 
 ---
 
-## 📥 Быстрый старт: Скачать готовую программу
+## 📥 Быстрый старт: Скачать готовые программы
 
-Чтобы установить и запустить StudioCRM на любом компьютере без установки .NET и компиляции:
+Готовые автономные сборки (не требуют установки .NET или сторонних зависимостей):
 
-1. 👉 **[Скачать готовую сборку StudioCRM-Windows-x64.zip (GitHub Releases)](https://github.com/rusky21/CRM/releases/latest/download/StudioCRM-Windows-x64.zip)**
-2. Распакуйте архив в любую удобную папку (например, `C:\StudioCRM` или на Рабочий стол).
-3. Запустите файл `StudioCRM.Desktop.exe`.
+* 💻 **Клиент для Windows:** 👉 **[Скачать StudioCRM-Windows-x64.zip](https://github.com/rusky21/CRM/releases/download/v1.0.1/StudioCRM-Windows-x64.zip)**  
+  *Распакуйте архив и запустите `StudioCRM.Desktop.exe`.*
+* 🐧 **Сервер для Ubuntu / Linux:** 👉 **[Скачать StudioCRM-Server-Linux-x64.tar.gz](https://github.com/rusky21/CRM/releases/download/v1.0.1/StudioCRM-Server-Linux-x64.tar.gz)**  
+  *Автономный бинарник сервера, запускается в 3 команды на любом Linux/Ubuntu VPS.*
 
-> 💡 **Автономная сборка (Self-contained):** Устанавливать .NET Runtime не требуется — всё необходимое уже упаковано внутри. При первом старте программа автоматически создаст локальную базу данных со стартовыми демо-данными и каталогом услуг.
+> 💡 **Почему папки `publish` нет в файлах репозитория:** В Git по стандарту выкладывается исходный код, а все скомпилированные бинарники хранятся во вкладке **[Releases](https://github.com/rusky21/CRM/releases)**.
 
 ---
 
-## 🔄 Синхронизация между устройствами (Локальная сеть / Сервер)
+## 🔄 Настройка сервера на Ubuntu
 
-StudioCRM поддерживает работу нескольких рабочих мест с общей базой данных:
+Для сервера на Ubuntu есть два простых способа:
 
-### 1. Серверная часть (`StudioCRM.Api`)
-Один компьютер (или сервер в локальной сети / VPS / Tailscale / Radmin VPN) запускает сервер:
+### Способ 1. Без Docker и без .NET (самый быстрый)
+Выполните на вашем сервере Ubuntu в терминале:
 ```bash
-dotnet run --project StudioCRM.Api
+# 1. Скачать готовый бинарник сервера
+wget https://github.com/rusky21/CRM/releases/download/v1.0.1/StudioCRM-Server-Linux-x64.tar.gz
+
+# 2. Распаковать архив
+tar -xzf StudioCRM-Server-Linux-x64.tar.gz
+
+# 3. Дать права на исполнение и запустить
+chmod +x StudioCRM.Api
+./StudioCRM.Api --urls=http://0.0.0.0:5000
 ```
-* По умолчанию сервер слушает на `http://0.0.0.0:5000` (доступен со всех устройств сети).
-* Swagger UI доступен по адресу `http://<IP-сервера>:5000/swagger`.
+Сервер запустится на порту `5000` и создаст локальную базу данных `studiocrm_server.db`.
+
+### Способ 2. Через Docker Compose (с PostgreSQL для постоянной работы)
+```bash
+git clone https://github.com/rusky21/CRM.git
+cd CRM
+docker compose up -d
+```
+Docker автоматически поднимет базу PostgreSQL 17 и API-сервер StudioCRM с автоперезапуском при перезагрузке машины.
 
 ### 2. Подключение рабочих мест (`StudioCRM.Desktop`)
 На любом клиентском компьютере:

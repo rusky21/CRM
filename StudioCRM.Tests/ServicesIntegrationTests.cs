@@ -155,4 +155,32 @@ public class ServicesIntegrationTests : IDisposable
         var activeAfterDelete = await catalogService.GetAllServicesAsync();
         Assert.DoesNotContain(activeAfterDelete, s => s.Id == saved.Id);
     }
+
+    [Fact]
+    public async Task OrderService_PreservesManualTotalCost_OnCreateAndUpdate()
+    {
+        var orderService = new OrderService(_context);
+        var clientService = new ClientService(_context);
+
+        var client = await clientService.AddOrUpdateClientAsync(new Client { Name = "Заказчик стоимости" });
+
+        var order = new Order
+        {
+            ClientId = client.Id,
+            Title = "Проект с договорной ценой",
+            TotalCost = 250000m, // Manual total cost
+            Items = new List<OrderItem>
+            {
+                new() { Title = "Консультация", Price = 10000m, Quantity = 1m } // Item sum is only 10,000
+            }
+        };
+
+        var created = await orderService.CreateOrderAsync(order);
+        Assert.Equal(250000m, created.TotalCost);
+
+        // Update with custom cost
+        created.TotalCost = 300000m;
+        var updated = await orderService.UpdateOrderAsync(created);
+        Assert.Equal(300000m, updated.TotalCost);
+    }
 }

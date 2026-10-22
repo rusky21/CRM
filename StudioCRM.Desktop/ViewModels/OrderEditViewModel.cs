@@ -166,6 +166,7 @@ public partial class OrderEditViewModel : ViewModelBase
                     DesignUrl = order.DesignUrl;
                     WorkBoardUrl = order.WorkBoardUrl;
                     Notes = order.Notes;
+                    TotalCost = order.TotalCost > 0 ? order.TotalCost : order.Items.Sum(i => i.Subtotal);
 
                     SelectedClient = AvailableClients.FirstOrDefault(c => c.Id == order.ClientId);
 
@@ -216,9 +217,22 @@ public partial class OrderEditViewModel : ViewModelBase
         }
     }
 
+    partial void OnTotalCostChanged(decimal value)
+    {
+        RemainingDebt = Math.Max(0m, value - PaidAmount);
+        if (NewPaymentAmount == 0 && RemainingDebt > 0)
+        {
+            NewPaymentAmount = RemainingDebt;
+        }
+    }
+
     public void RecalculateTotals()
     {
-        TotalCost = Items.Sum(i => i.Price * i.Quantity);
+        if (TotalCost == 0 && Items.Count > 0)
+        {
+            TotalCost = Items.Sum(i => i.Price * i.Quantity);
+        }
+
         PaidAmount = Payments.Where(p => p.IsConfirmed).Sum(p => p.Amount);
         RemainingDebt = Math.Max(0m, TotalCost - PaidAmount);
 
@@ -237,6 +251,13 @@ public partial class OrderEditViewModel : ViewModelBase
         {
             NewPaymentAmount = RemainingDebt;
         }
+    }
+
+    [RelayCommand]
+    public void CalculateCostFromItems()
+    {
+        TotalCost = Items.Sum(i => i.Price * i.Quantity);
+        RecalculateTotals();
     }
 
     [RelayCommand]
@@ -405,7 +426,7 @@ public partial class OrderEditViewModel : ViewModelBase
                 DesignUrl = DesignUrl,
                 WorkBoardUrl = WorkBoardUrl,
                 Notes = Notes,
-                TotalCost = Items.Sum(i => i.Price * i.Quantity),
+                TotalCost = TotalCost > 0 ? TotalCost : Items.Sum(i => i.Price * i.Quantity),
                 Items = Items.Select(i => i.ToModel()).ToList(),
                 Stages = Stages.Select(s => s.ToModel()).ToList(),
                 Payments = Payments.Select(p => p.ToModel()).ToList()

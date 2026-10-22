@@ -1,4 +1,4 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -155,17 +155,40 @@
                                 <Grid ColumnDefinitions="*,12,*">
                                     <StackPanel Grid.Column="0" Spacing="4">
                                         <TextBlock Text="Дата старта" FontSize="12" Foreground="#94A3B8" />
-                                        <DatePicker SelectedDate="{Binding StartDate, Mode=TwoWay}"
+                                        <DatePicker SelectedDate="{Binding StartDate, Mode=TwoWay, Converter={StaticResource DateTimeToOffsetConverter}}"
                                                     HorizontalAlignment="Stretch"
                                                     Background="#0F172A" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="2" Spacing="4">
                                         <TextBlock Text="Дедлайн" FontSize="12" Foreground="#94A3B8" />
-                                        <DatePicker SelectedDate="{Binding Deadline, Mode=TwoWay}"
+                                        <DatePicker SelectedDate="{Binding Deadline, Mode=TwoWay, Converter={StaticResource DateTimeToOffsetConverter}}"
                                                     HorizontalAlignment="Stretch"
                                                     Background="#0F172A" />
                                     </StackPanel>
                                 </Grid>
+
+                                <!-- Manual Project Cost -->
+                                <StackPanel Spacing="4">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Text="Стоимость проекта / Сумма договора (₽)" FontSize="12" Foreground="#94A3B8" />
+                                        <Button Grid.Column="1"
+                                                Classes="Secondary"
+                                                Command="{Binding CalculateCostFromItemsCommand}"
+                                                Padding="8,2"
+                                                FontSize="11">
+                                            <TextBlock Text="⚡ Рассчитать по смете" />
+                                        </Button>
+                                    </Grid>
+                                    <NumericUpDown Value="{Binding TotalCost, Mode=TwoWay}"
+                                                   Minimum="0"
+                                                   Increment="5000"
+                                                   FormatString="N0"
+                                                   Background="#0F172A"
+                                                   BorderBrush="#334155"
+                                                   CornerRadius="8"
+                                                   Padding="12,8"
+                                                   HorizontalAlignment="Stretch" />
+                                </StackPanel>
                             </StackPanel>
 
                             <!-- Right: URLs & Notes -->
@@ -372,18 +395,35 @@
 
                         <!-- TOTALS ROW -->
                         <Border Background="#111827" CornerRadius="8" Padding="16,12">
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Text="ИТОГОВАЯ СТОИМОСТЬ СМЕТЫ:"
-                                           FontWeight="SemiBold"
-                                           FontSize="14"
-                                           Foreground="#94A3B8"
-                                           VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="1"
-                                           Text="{Binding TotalCost, Converter={StaticResource CurrencyFormatConverter}}"
-                                           FontWeight="Bold"
-                                           FontSize="22"
-                                           Foreground="#34D399"
-                                           VerticalAlignment="Center" />
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="ИТОГОВАЯ СТОИМОСТЬ ПРОЕКТА:"
+                                               FontWeight="SemiBold"
+                                               FontSize="14"
+                                               Foreground="#94A3B8" />
+                                    <TextBlock Text="Задается вручную или рассчитывается по смете"
+                                               FontSize="11"
+                                               Foreground="#64748B" />
+                                </StackPanel>
+                                <Button Grid.Column="2"
+                                        Classes="Secondary"
+                                        Command="{Binding CalculateCostFromItemsCommand}"
+                                        Content="⚡ Рассчитать по смете"
+                                        Margin="16,0"
+                                        VerticalAlignment="Center" />
+                                <NumericUpDown Grid.Column="3"
+                                               Value="{Binding TotalCost, Mode=TwoWay}"
+                                               Minimum="0"
+                                               Increment="5000"
+                                               FormatString="N0"
+                                               FontWeight="Bold"
+                                               FontSize="18"
+                                               Foreground="#34D399"
+                                               Background="#0F172A"
+                                               BorderBrush="#334155"
+                                               CornerRadius="8"
+                                               Width="200"
+                                               VerticalAlignment="Center" />
                             </Grid>
                         </Border>
                     </StackPanel>
@@ -458,7 +498,7 @@
                                 <DataGridTemplateColumn Header="Дедлайн" Width="180">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate x:DataType="vm:OrderStageViewModel">
-                                            <DatePicker SelectedDate="{Binding Deadline, Mode=TwoWay}"
+                                            <DatePicker SelectedDate="{Binding Deadline, Mode=TwoWay, Converter={StaticResource DateTimeToOffsetConverter}}"
                                                         Background="Transparent"
                                                         BorderThickness="0"
                                                         VerticalAlignment="Center" />

@@ -129,3 +129,33 @@ public class DateTimeFormatConverter : IValueConverter
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => throw new NotImplementedException();
 }
+
+public class DateTimeToOffsetConverter : IValueConverter
+{
+    public static readonly DateTimeToOffsetConverter Instance = new();
+
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is DateTime dt)
+        {
+            if (dt == DateTime.MinValue)
+                return null;
+            return new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Unspecified), TimeSpan.Zero);
+        }
+        return null;
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is DateTimeOffset dto)
+        {
+            return dto.DateTime;
+        }
+        if (targetType == typeof(DateTime))
+        {
+            return DateTime.Today;
+        }
+        return null;
+    }
+}
+

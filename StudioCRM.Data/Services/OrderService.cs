@@ -65,7 +65,10 @@ public class OrderService : IOrderService
         {
             item.Subtotal = item.Price * item.Quantity;
         }
-        order.TotalCost = order.Items.Sum(i => i.Subtotal);
+        if (order.TotalCost <= 0)
+        {
+            order.TotalCost = order.Items.Sum(i => i.Subtotal);
+        }
 
         // Ensure navigation references don't attempt to re-insert existing client
         if (order.ClientId > 0)
@@ -232,7 +235,9 @@ public class OrderService : IOrderService
             }
         }
 
-        existingOrder.TotalCost = existingOrder.Items.Sum(i => i.Subtotal);
+        existingOrder.TotalCost = order.TotalCost > 0
+            ? order.TotalCost
+            : existingOrder.Items.Sum(i => i.Subtotal);
 
         await context.SaveChangesAsync();
         return existingOrder;

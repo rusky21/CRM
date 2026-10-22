@@ -19,6 +19,7 @@
         <conv:CurrencyFormatConverter x:Key="CurrencyFormatConverter" />
         <conv:DebtToBrushConverter x:Key="DebtToBrushConverter" />
         <conv:DateTimeFormatConverter x:Key="DateTimeFormatConverter" />
+        <conv:DateTimeToOffsetConverter x:Key="DateTimeToOffsetConverter" />
 
         <!-- Accent Colors & Brushes -->
         <Color x:Key="BrandPrimaryColor">#6366F1</Color>

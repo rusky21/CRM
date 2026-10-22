@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: studiocrm_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: studiocrm
+      POSTGRES_USER: studiocrm_user
+      POSTGRES_PASSWORD: studiocrm_secure_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - studiocrm_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U studiocrm_user -d studiocrm"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: StudioCRM.Api/Dockerfile
+    container_name: studiocrm_api
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - ASPNETCORE_URLS=http://+:5000
+      - DatabaseProvider=PostgreSql
+      - ConnectionStrings__PostgreSql=Host=db;Port=5432;Database=studiocrm;Username=studiocrm_user;Password=studiocrm_secure_password
+      - Logging__LogLevel__Default=Information
+
+volumes:
+  studiocrm_pgdata:

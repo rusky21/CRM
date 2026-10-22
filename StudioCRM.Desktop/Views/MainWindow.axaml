@@ -1,0 +1,182 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:StudioCRM.Desktop.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="800"
+        x:Class="StudioCRM.Desktop.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="StudioCRM — Управление IT-студией и проектами"
+        Width="1320" Height="860"
+        MinWidth="1100" MinHeight="700"
+        WindowStartupLocation="CenterScreen"
+        Background="#0B0F19">
+
+    <Grid ColumnDefinitions="260,*">
+        <!-- LEFT SIDEBAR -->
+        <Border Grid.Column="0"
+                Background="#111827"
+                BorderBrush="#1F2937"
+                BorderThickness="0,0,1,0">
+            <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="16,20,16,16">
+
+                <!-- LOGO & BRANDING -->
+                <StackPanel Grid.Row="0" Margin="4,0,4,24">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <Border Width="40" Height="40"
+                                CornerRadius="10"
+                                Background="#6366F1">
+                            <TextBlock Text="⚡"
+                                       FontSize="22"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="StudioCRM"
+                                       FontWeight="Bold"
+                                       FontSize="18"
+                                       Foreground="#F9FAFB" />
+                            <TextBlock Text="IT Agency Workspace"
+                                       FontSize="11"
+                                       Foreground="#9CA3AF" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+
+                <!-- QUICK ACTION: + НОВЫЙ ЗАКАЗ -->
+                <StackPanel Grid.Row="1" Margin="0,0,0,20">
+                    <Button Classes="Primary"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Command="{Binding NavigateToCreateOrderCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="＋" FontWeight="Bold" FontSize="16" VerticalAlignment="Center" />
+                            <TextBlock Text="Новый заказ" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <!-- NAVIGATION MENU -->
+                <StackPanel Grid.Row="2" Spacing="6">
+                    <TextBlock Text="РАЗДЕЛЫ СИСТЕМЫ"
+                               FontSize="10"
+                               FontWeight="Bold"
+                               Foreground="#6B7280"
+                               Margin="8,0,0,6" />
+
+                    <!-- Orders -->
+                    <Button Classes="NavButton"
+                            Classes.Selected="{Binding IsOrdersSelected}"
+                            Command="{Binding NavigateToOrdersCommand}">
+                        <Grid ColumnDefinitions="28,*">
+                            <TextBlock Text="📋" FontSize="16" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="Заказы и проекты" Margin="8,0,0,0" VerticalAlignment="Center" />
+                        </Grid>
+                    </Button>
+
+                    <!-- Clients -->
+                    <Button Classes="NavButton"
+                            Classes.Selected="{Binding IsClientsSelected}"
+                            Command="{Binding NavigateToClientsCommand}">
+                        <Grid ColumnDefinitions="28,*">
+                            <TextBlock Text="👥" FontSize="16" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="Клиенты" Margin="8,0,0,0" VerticalAlignment="Center" />
+                        </Grid>
+                    </Button>
+
+                    <!-- Services Catalog -->
+                    <Button Classes="NavButton"
+                            Classes.Selected="{Binding IsServicesSelected}"
+                            Command="{Binding NavigateToServicesCommand}">
+                        <Grid ColumnDefinitions="28,*">
+                            <TextBlock Text="📦" FontSize="16" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="Каталог услуг" Margin="8,0,0,0" VerticalAlignment="Center" />
+                        </Grid>
+                    </Button>
+
+                    <!-- Finances -->
+                    <Button Classes="NavButton"
+                            Classes.Selected="{Binding IsFinancesSelected}"
+                            Command="{Binding NavigateToFinancesCommand}">
+                        <Grid ColumnDefinitions="28,*">
+                            <TextBlock Text="💰" FontSize="16" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="Финансы и бэкап" Margin="8,0,0,0" VerticalAlignment="Center" />
+                        </Grid>
+                    </Button>
+
+                    <!-- Settings / Server IP -->
+                    <Button Classes="NavButton"
+                            Classes.Selected="{Binding IsSettingsSelected}"
+                            Command="{Binding NavigateToSettingsCommand}">
+                        <Grid ColumnDefinitions="28,*">
+                            <TextBlock Text="⚙️" FontSize="16" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="Сервер и синхронизация" Margin="8,0,0,0" VerticalAlignment="Center" />
+                        </Grid>
+                    </Button>
+                </StackPanel>
+
+                <!-- SIDEBAR FOOTER (CLICKABLE FOR SETTINGS) -->
+                <Button Grid.Row="3"
+                        Background="#1F2937"
+                        CornerRadius="8"
+                        Padding="12,10"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        Cursor="Hand"
+                        Command="{Binding NavigateToSettingsCommand}">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <Border Width="8" Height="8"
+                                CornerRadius="4"
+                                Background="{Binding ConnectionStatusColor}"
+                                VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                            <TextBlock Text="{Binding ConnectionModeText}"
+                                       FontSize="12"
+                                       FontWeight="Medium"
+                                       Foreground="#F3F4F6"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding ConnectionModeSubtext}"
+                                       FontSize="10"
+                                       Foreground="#9CA3AF" />
+                        </StackPanel>
+                    </Grid>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- RIGHT MAIN AREA -->
+        <Grid Grid.Column="1" RowDefinitions="Auto,*">
+            <!-- HEADER -->
+            <Border Grid.Row="0"
+                    Background="#111827"
+                    BorderBrush="#1F2937"
+                    BorderThickness="0,0,0,1"
+                    Padding="28,16">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding CurrentPageTitle}"
+                                   FontSize="20"
+                                   FontWeight="Bold"
+                                   Foreground="#F9FAFB"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Border Background="#1F2937" CornerRadius="6" Padding="10,6">
+                            <TextBlock Text="StudioCRM v1.0"
+                                       FontSize="12"
+                                       Foreground="#9CA3AF" />
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- MAIN DYNAMIC CONTENT -->
+            <ContentControl Grid.Row="1"
+                            Content="{Binding CurrentPageViewModel}"
+                            Margin="0" />
+        </Grid>
+    </Grid>
+</Window>
+

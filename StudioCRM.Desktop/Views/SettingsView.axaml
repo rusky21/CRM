@@ -1,0 +1,196 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:StudioCRM.Desktop.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="800"
+             x:Class="StudioCRM.Desktop.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel"
+             Background="#0B0F19">
+
+    <ScrollViewer Padding="32,28">
+        <StackPanel Spacing="24" MaxWidth="800" HorizontalAlignment="Left">
+
+            <!-- HEADER -->
+            <StackPanel Spacing="6">
+                <TextBlock Text="Настройки синхронизации и сервера"
+                           FontSize="22"
+                           FontWeight="Bold"
+                           Foreground="#F9FAFB" />
+                <TextBlock Text="Выберите режим работы приложения: автономная локальная база данных или подключение к общему серверу студии."
+                           FontSize="13"
+                           Foreground="#94A3B8" />
+            </StackPanel>
+
+            <!-- 1. STORAGE MODE SELECTION -->
+            <Border Classes="Card">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="1. Режим хранения данных"
+                               FontSize="16"
+                               FontWeight="Bold"
+                               Foreground="#F8FAFC" />
+
+                    <Grid ColumnDefinitions="*,16,*">
+                        <!-- Local SQLite Card -->
+                        <Border Grid.Column="0"
+                                Background="{Binding IsLocalMode, Converter={x:Static StringConverters.IsNullOrEmpty}}"
+                                BorderBrush="{Binding IsLocalMode, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                CornerRadius="10"
+                                Padding="16"
+                                Cursor="Hand">
+                            <Button Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="0"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Stretch"
+                                    Command="{Binding SelectLocalModeCommand}">
+                                <StackPanel Spacing="10">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Border Width="36" Height="36" CornerRadius="8" Background="#1E293B" VerticalAlignment="Center">
+                                            <TextBlock Text="💻" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="Локальный режим" FontWeight="SemiBold" FontSize="15" Foreground="#F8FAFC" />
+                                            <TextBlock Text="Файл SQLite (studiocrm.db)" FontSize="12" Foreground="#94A3B8" />
+                                        </StackPanel>
+                                        <RadioButton Grid.Column="2"
+                                                     IsChecked="{Binding IsLocalMode, Mode=OneWay}"
+                                                     IsHitTestVisible="False"
+                                                     VerticalAlignment="Center" />
+                                    </Grid>
+                                    <TextBlock Text="Все данные хранятся локально на этом устройстве. Интернет не требуется, синхронизация с другими ПК отключена."
+                                               FontSize="12"
+                                               Foreground="#64748B"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Button>
+                        </Border>
+
+                        <!-- Remote Server Card -->
+                        <Border Grid.Column="2"
+                                Background="#1E293B"
+                                CornerRadius="10"
+                                Padding="16"
+                                Cursor="Hand">
+                            <Button Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="0"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Stretch"
+                                    Command="{Binding SelectRemoteModeCommand}">
+                                <StackPanel Spacing="10">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Border Width="36" Height="36" CornerRadius="8" Background="#1E3A8A" VerticalAlignment="Center">
+                                            <TextBlock Text="🌐" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="Сетевой сервер" FontWeight="SemiBold" FontSize="15" Foreground="#818CF8" />
+                                            <TextBlock Text="StudioCRM.Api + PostgreSQL" FontSize="12" Foreground="#94A3B8" />
+                                        </StackPanel>
+                                        <RadioButton Grid.Column="2"
+                                                     IsChecked="{Binding IsRemoteMode, Mode=OneWay}"
+                                                     IsHitTestVisible="False"
+                                                     VerticalAlignment="Center" />
+                                    </Grid>
+                                    <TextBlock Text="Синхронизация между всеми компьютерами студии в реальном времени через центральный сервер VPS или LAN."
+                                               FontSize="12"
+                                               Foreground="#64748B"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Button>
+                        </Border>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 2. SERVER CONNECTION PARAMETERS (Visible when Remote Mode selected) -->
+            <Border Classes="Card" IsVisible="{Binding IsRemoteMode}">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="2. Параметры подключения к серверу"
+                               FontSize="16"
+                               FontWeight="Bold"
+                               Foreground="#F8FAFC" />
+
+                    <!-- Host / IP input -->
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="IP-адрес или домен сервера с портом *" FontSize="12" Foreground="#94A3B8" />
+                        <TextBox Text="{Binding ServerUrl, Mode=TwoWay}"
+                                 PlaceholderText="Например: http://192.168.1.100:5000 или https://crm.yourstudio.com"
+                                 Background="#0F172A"
+                                 BorderBrush="#334155"
+                                 CornerRadius="8"
+                                 Padding="12,10"
+                                 FontSize="14" />
+                    </StackPanel>
+
+                    <!-- Quick Presets -->
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Быстрый выбор:" VerticalAlignment="Center" FontSize="12" Foreground="#64748B" />
+                        <Button Classes="Secondary"
+                                Command="{Binding SetLocalhostPresetCommand}"
+                                Padding="8,4"
+                                FontSize="11">
+                            <TextBlock Text="Локальный Docker (127.0.0.1:5000)" />
+                        </Button>
+                        <Button Classes="Secondary"
+                                Command="{Binding SetLanPresetCommand}"
+                                Padding="8,4"
+                                FontSize="11">
+                            <TextBlock Text="Офисная сеть (192.168.1.100:5000)" />
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Test Connection Button & Result -->
+                    <Grid ColumnDefinitions="Auto,*" Margin="0,8,0,0">
+                        <Button Grid.Column="0"
+                                Classes="Secondary"
+                                Command="{Binding TestConnectionCommand}"
+                                IsEnabled="{Binding !IsTesting}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="⚡" FontSize="13" VerticalAlignment="Center" />
+                                <TextBlock Text="Проверить подключение" FontSize="13" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+
+                        <StackPanel Grid.Column="1"
+                                    Margin="16,0,0,0"
+                                    VerticalAlignment="Center"
+                                    IsVisible="{Binding TestResultText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <TextBlock Text="{Binding TestResultText}"
+                                       Foreground="{Binding IsTestSuccess, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                       FontWeight="Medium"
+                                       FontSize="13" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 3. SAVE AND STATUS -->
+            <Border Classes="Card">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel VerticalAlignment="Center" Spacing="4">
+                        <TextBlock Text="{Binding SaveMessage}"
+                                   Foreground="#34D399"
+                                   FontWeight="SemiBold"
+                                   FontSize="13"
+                                   IsVisible="{Binding SaveMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        <TextBlock Text="После сохранения выбранный источник данных активируется мгновенно."
+                                   FontSize="12"
+                                   Foreground="#64748B" />
+                    </StackPanel>
+
+                    <Button Grid.Column="1"
+                            Classes="Primary"
+                            Command="{Binding SaveSettingsCommand}"
+                            Padding="24,11">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="💾" FontSize="15" VerticalAlignment="Center" />
+                            <TextBlock Text="Сохранить и применить" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

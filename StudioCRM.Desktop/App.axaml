@@ -1,0 +1,123 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="StudioCRM.Desktop.App"
+             xmlns:local="using:StudioCRM.Desktop"
+             xmlns:conv="using:StudioCRM.Desktop.Converters"
+             RequestedThemeVariant="Dark">
+
+    <Application.DataTemplates>
+        <local:ViewLocator />
+    </Application.DataTemplates>
+
+    <Application.Resources>
+        <!-- Value & Brush Converters -->
+        <conv:OrderStatusToBrushConverter x:Key="OrderStatusToBrushConverter" />
+        <conv:OrderStatusToBackgroundBrushConverter x:Key="OrderStatusToBackgroundBrushConverter" />
+        <conv:OrderStatusToStringConverter x:Key="OrderStatusToStringConverter" />
+        <conv:BillingTypeToStringConverter x:Key="BillingTypeToStringConverter" />
+        <conv:PaymentTypeToStringConverter x:Key="PaymentTypeToStringConverter" />
+        <conv:CurrencyFormatConverter x:Key="CurrencyFormatConverter" />
+        <conv:DebtToBrushConverter x:Key="DebtToBrushConverter" />
+        <conv:DateTimeFormatConverter x:Key="DateTimeFormatConverter" />
+
+        <!-- Accent Colors & Brushes -->
+        <Color x:Key="BrandPrimaryColor">#6366F1</Color>
+        <Color x:Key="BrandSecondaryColor">#8B5CF6</Color>
+        <Color x:Key="BgDarkPrimary">#0F172A</Color>
+        <Color x:Key="BgDarkSecondary">#1E293B</Color>
+        <Color x:Key="BgDarkTertiary">#334155</Color>
+
+        <SolidColorBrush x:Key="BrandPrimaryBrush" Color="#6366F1" />
+        <SolidColorBrush x:Key="BrandSecondaryBrush" Color="#8B5CF6" />
+        <SolidColorBrush x:Key="BgDarkPrimaryBrush" Color="#0F172A" />
+        <SolidColorBrush x:Key="BgDarkSecondaryBrush" Color="#1E293B" />
+        <SolidColorBrush x:Key="BgDarkTertiaryBrush" Color="#334155" />
+        <SolidColorBrush x:Key="BorderDarkBrush" Color="#334155" />
+        <SolidColorBrush x:Key="TextMutedBrush" Color="#94A3B8" />
+        <SolidColorBrush x:Key="SuccessGreenBrush" Color="#10B981" />
+        <SolidColorBrush x:Key="WarningAmberBrush" Color="#F59E0B" />
+        <SolidColorBrush x:Key="DangerRedBrush" Color="#EF4444" />
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"/>
+
+        <!-- Custom Card Style -->
+        <Style Selector="Border.Card">
+            <Setter Property="Background" Value="#1E293B" />
+            <Setter Property="BorderBrush" Value="#334155" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="16" />
+        </Style>
+
+        <!-- KPI Mini-Card Style -->
+        <Style Selector="Border.KpiCard">
+            <Setter Property="Background" Value="#1E293B" />
+            <Setter Property="BorderBrush" Value="#334155" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Padding" Value="18,14" />
+        </Style>
+
+        <!-- Primary Accent Button -->
+        <Style Selector="Button.Primary">
+            <Setter Property="Background" Value="#6366F1" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="16,9" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.Primary:pointerover">
+            <Setter Property="Background" Value="#4F46E5" />
+        </Style>
+
+        <!-- Secondary Button -->
+        <Style Selector="Button.Secondary">
+            <Setter Property="Background" Value="#334155" />
+            <Setter Property="Foreground" Value="#F8FAFC" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.Secondary:pointerover">
+            <Setter Property="Background" Value="#475569" />
+        </Style>
+
+        <!-- Danger Button -->
+        <Style Selector="Button.Danger">
+            <Setter Property="Background" Value="#7F1D1D" />
+            <Setter Property="Foreground" Value="#FCA5A5" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.Danger:pointerover">
+            <Setter Property="Background" Value="#991B1B" />
+        </Style>
+
+        <!-- Nav Item Button -->
+        <Style Selector="Button.NavButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#94A3B8" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="14,10" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.NavButton:pointerover">
+            <Setter Property="Background" Value="#1E293B" />
+            <Setter Property="Foreground" Value="#F8FAFC" />
+        </Style>
+        <Style Selector="Button.NavButton.Selected">
+            <Setter Property="Background" Value="#2D3748" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+    </Application.Styles>
+</Application>

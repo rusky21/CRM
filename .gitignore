@@ -1,0 +1,30 @@
+## Build results
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## Visual Studio & IDEs
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Database & Local State
+*.db
+*.db-shm
+*.db-wal
+studiocrm.db
+studiocrm_server.db
+Backups/
+*.backup
+
+## Local configurations
+appsettings.local.json
+
+## Antigravity / Agent runtime artifacts
+.agents/
+.geminiignore

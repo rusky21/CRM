@@ -26,6 +26,10 @@ Backups/
 ## Local configurations
 appsettings.local.json
 
+## Distribution packages
+*.zip
+*.tar.gz
+
 ## Antigravity / Agent runtime artifacts
 .agents/
 .geminiignore

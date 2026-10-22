@@ -44,7 +44,21 @@ public class SettingsAndSyncTests
     {
         var config = new AppConfig();
         Assert.Equal(StorageMode.Local, config.Mode);
-        Assert.Equal("http://127.0.0.1:5000", config.ServerUrl);
+        Assert.Equal("http://212.67.15.218:5000", config.ServerUrl);
         Assert.Equal(10, config.TimeoutSeconds);
+    }
+
+    [Theory]
+    [InlineData("212.67.15.218", "http://212.67.15.218:5000")]
+    [InlineData("212.67.15.218:5000", "http://212.67.15.218:5000")]
+    [InlineData("http://212.67.15.218", "http://212.67.15.218:5000")]
+    [InlineData("http://212.67.15.218:5000", "http://212.67.15.218:5000")]
+    [InlineData("http://192.168.1.100:8080", "http://192.168.1.100:8080")]
+    [InlineData("https://crm.studio.com", "https://crm.studio.com")]
+    [InlineData("localhost", "http://localhost:5000")]
+    public void NormalizeServerUrl_FormatsInputCorrectly(string input, string expected)
+    {
+        string result = SettingsService.NormalizeServerUrl(input);
+        Assert.Equal(expected, result);
     }
 }

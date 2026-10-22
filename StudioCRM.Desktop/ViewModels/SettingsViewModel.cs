@@ -20,7 +20,7 @@ public partial class SettingsViewModel : ViewModelBase
     private bool _isLocalMode = true;
 
     [ObservableProperty]
-    private string _serverUrl = "http://127.0.0.1:5000";
+    private string _serverUrl = "http://212.67.15.218:5000";
 
     [ObservableProperty]
     private bool _isTesting;
@@ -33,6 +33,14 @@ public partial class SettingsViewModel : ViewModelBase
 
     [ObservableProperty]
     private string? _saveMessage;
+
+    [ObservableProperty]
+    private string _currentSavedServerUrl = "";
+
+    [ObservableProperty]
+    private string _currentStorageModeText = "";
+
+    public string SettingsFilesInfo => $"Конфигурация сохраняется в:\n• {SettingsService.LocalSettingsFilePath} (портативный)\n• {SettingsService.AppDataSettingsFilePath}";
 
     public SettingsViewModel(ISettingsService settingsService, IApiClient apiClient, Action? onSettingsApplied = null)
     {
@@ -48,7 +56,16 @@ public partial class SettingsViewModel : ViewModelBase
         var config = _settingsService.CurrentConfig;
         IsRemoteMode = config.Mode == StorageMode.Remote;
         IsLocalMode = config.Mode == StorageMode.Local;
-        ServerUrl = config.ServerUrl;
+        ServerUrl = SettingsService.NormalizeServerUrl(config.ServerUrl);
+        UpdateStatusInfo();
+    }
+
+    private void UpdateStatusInfo()
+    {
+        CurrentSavedServerUrl = _settingsService.CurrentConfig.ServerUrl;
+        CurrentStorageModeText = _settingsService.CurrentConfig.Mode == StorageMode.Remote
+            ? "🌐 Сетевой сервер (PostgreSQL)"
+            : "💻 Локальный (SQLite)";
     }
 
     [RelayCommand]
@@ -63,6 +80,12 @@ public partial class SettingsViewModel : ViewModelBase
     {
         IsLocalMode = false;
         IsRemoteMode = true;
+    }
+
+    [RelayCommand]
+    public void SetStudioServerPreset()
+    {
+        ServerUrl = "http://212.67.15.218:5000";
     }
 
     [RelayCommand]
@@ -82,30 +105,26 @@ public partial class SettingsViewModel : ViewModelBase
     {
         if (string.IsNullOrWhiteSpace(ServerUrl))
         {
-            TestResultText = "Укажите IP-адрес или домен сервера.";
+            TestResultText = "❌ Укажите IP-адрес или домен сервера.";
             IsTestSuccess = false;
             return;
         }
 
-        // Clean URL
-        string url = ServerUrl.Trim();
-        if (!url.StartsWith("http://") && !url.StartsWith("https://"))
-        {
-            url = "http://" + url;
-            ServerUrl = url;
-        }
+        string url = SettingsService.NormalizeServerUrl(ServerUrl);
+        ServerUrl = url;
 
         IsTesting = true;
-        TestResultText = "Проверка соединения с сервером...";
+        TestResultText = $"Проверка соединения с {url}...";
         try
         {
-            // Temporarily update current config in memory to test this URL
             var oldUrl = _settingsService.CurrentConfig.ServerUrl;
             _settingsService.CurrentConfig.ServerUrl = url;
 
             var (success, message, elapsedMs) = await _apiClient.CheckHealthAsync();
             IsTestSuccess = success;
-            TestResultText = message;
+            TestResultText = success
+                ? $"✅ Подключение успешно! ({url}, отклик {elapsedMs} мс)"
+                : $"❌ Сервер недоступен: {message}";
 
             if (!success)
             {
@@ -115,7 +134,7 @@ public partial class SettingsViewModel : ViewModelBase
         catch (Exception ex)
         {
             IsTestSuccess = false;
-            TestResultText = $"Ошибка: {ex.Message}";
+            TestResultText = $"❌ Ошибка соединения: {ex.Message}";
         }
         finally
         {
@@ -124,14 +143,31 @@ public partial class SettingsViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public void SaveAndConnectRemote()
+    {
+        string url = SettingsService.NormalizeServerUrl(ServerUrl);
+        ServerUrl = url;
+        IsRemoteMode = true;
+        IsLocalMode = false;
+
+        var newConfig = new AppConfig
+        {
+            Mode = StorageMode.Remote,
+            ServerUrl = url
+        };
+
+        _settingsService.SaveConfig(newConfig);
+        UpdateStatusInfo();
+
+        SaveMessage = $"✅ IP сервера сохранен: {url}! Сетевой режим успешно активирован.";
+        _onSettingsApplied?.Invoke();
+    }
+
+    [RelayCommand]
     public void SaveSettings()
     {
-        string url = ServerUrl.Trim();
-        if (!url.StartsWith("http://") && !url.StartsWith("https://"))
-        {
-            url = "http://" + url;
-            ServerUrl = url;
-        }
+        string url = SettingsService.NormalizeServerUrl(ServerUrl);
+        ServerUrl = url;
 
         var newConfig = new AppConfig
         {
@@ -140,10 +176,11 @@ public partial class SettingsViewModel : ViewModelBase
         };
 
         _settingsService.SaveConfig(newConfig);
+        UpdateStatusInfo();
 
         SaveMessage = newConfig.Mode == StorageMode.Remote
-            ? $"Настройки сохранены! Активен серверный режим ({url})."
-            : "Настройки сохранены! Активен локальный режим (SQLite).";
+            ? $"✅ Настройки сохранены! Активен серверный режим ({url})."
+            : "✅ Настройки сохранены! Активен локальный режим (SQLite).";
 
         _onSettingsApplied?.Invoke();
     }

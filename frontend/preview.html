@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>StudioCRM TMA - Contacts Book, In-Chat Orders & 1:1 Telegram Web</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -215,14 +216,43 @@
       const [newClientOrder, setNewClientOrder] = useState('75000 Разработка Telegram-бота');
       const [isSubmittingNewClient, setIsSubmittingNewClient] = useState(false);
 
-      // Account Creation & Ingestion State
+      // Operator Profile from Telegram WebApp
+      const [operatorUser, setOperatorUser] = useState(null);
+
+      // In-Chat Message Search State
+      const [isChatSearchOpen, setIsChatSearchOpen] = useState(false);
+      const [chatSearchQuery, setChatSearchQuery] = useState('');
+
+      // Account Creation & Telegram Login State
       const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
-      const [addAccountTab, setAddAccountTab] = useState('file'); // 'file' | 'phone'
+      const [addAccountTab, setAddAccountTab] = useState('phone'); // 'phone' | 'qr' | 'file'
+      const [addAccountStep, setAddAccountStep] = useState(1); // 1: Phone, 2: Code, 3: 2FA Password
       const [addAccountTitle, setAddAccountTitle] = useState('');
-      const [addAccountPhone, setAddAccountPhone] = useState('');
+      const [addAccountPhone, setAddAccountPhone] = useState('+7 ');
       const [addAccountProxy, setAddAccountProxy] = useState('SOCKS5 • 45ms');
       const [uploadedFileName, setUploadedFileName] = useState(null);
+      const [addAccountCode, setAddAccountCode] = useState('');
+      const [addAccount2FA, setAddAccount2FA] = useState('');
+      const [show2FAPassword, setShow2FAPassword] = useState(false);
+      const [sessionToken, setSessionToken] = useState(null);
+      const [phoneCodeHash, setPhoneCodeHash] = useState(null);
+      const [authError, setAuthError] = useState(null);
       const [isSubmittingAccount, setIsSubmittingAccount] = useState(false);
+      const [qrScanned, setQrScanned] = useState(false);
+
+      // Telegram Mini App WebApp SDK initialization
+      useEffect(() => {
+        if (window.Telegram && window.Telegram.WebApp) {
+          try {
+            window.Telegram.WebApp.ready();
+            window.Telegram.WebApp.expand();
+            const u = window.Telegram.WebApp.initDataUnsafe?.user;
+            if (u) setOperatorUser(u);
+          } catch (e) {
+            console.warn('TMA init:', e);
+          }
+        }
+      }, []);
 
       const scrollRef = useRef(null);
 
@@ -383,37 +413,257 @@
         setInputText('');
       };
 
-      const handleAddAccountSubmit = (e) => {
-        e.preventDefault();
+      // Finish registration & add account to state
+      const finishAccountRegistration = (accData) => {
+        const newId = accData.id || ('acc-' + (accounts.length + 1));
+        const title = accData.custom_title || accData.title || addAccountTitle.trim() || addAccountPhone.trim() || 'Telegram Account';
+        const phone = accData.phone || addAccountPhone.trim() || '+7 (999) ' + Math.floor(100 + Math.random() * 900) + '-00-00';
+        const newAcc = {
+          id: newId,
+          title: title,
+          custom_title: title,
+          phone: phone,
+          unread_count: 0,
+          status: 'ACTIVE',
+          is_connected: true,
+          proxy: addAccountProxy,
+          device: 'iPhone 15 Pro, iOS 17.5',
+          device_model: 'iPhone 15 Pro, iOS 17.5',
+          username: accData.username || 'tg_' + Math.floor(100 + Math.random() * 900)
+        };
+
+        setAccounts(prev => [newAcc, ...prev]);
+        INITIAL_DIALOGUES[newId] = [
+          {
+            id: `d-${newId}-1`,
+            peer_id: Math.floor(Math.random() * 9000) + 1000,
+            peer_name: 'Служба Telegram',
+            peer_username: 'telegram',
+            unread_count: 1,
+            last_message_text: `Успешный вход в аккаунт Telegram (${newAcc.device})`,
+            last_message_at: 'Только что'
+          }
+        ];
+
+        setIsSubmittingAccount(false);
+        setIsAddAccountOpen(false);
+        setAddAccountStep(1);
+        setAddAccountTitle('');
+        setAddAccountPhone('+7 ');
+        setAddAccountCode('');
+        setAddAccount2FA('');
+        setSessionToken(null);
+        setPhoneCodeHash(null);
+        setAuthError(null);
+        setUploadedFileName(null);
+        setSyncNotice(`✅ Аккаунт «${title}» (${phone}) успешно подключен к Telegram!`);
+        setTimeout(() => setSyncNotice(null), 6000);
+      };
+
+      // STEP 1: Request SMS / App Code
+      const handleRequestPhoneCode = async (e) => {
+        if (e) e.preventDefault();
+        setAuthError(null);
+        const cleanPhone = addAccountPhone.trim().replace(/\s+/g, '');
+        if (cleanPhone.length < 8) {
+          setAuthError('Укажите корректный номер телефона с кодом страны (например: +7 999 123-45-67)');
+          return;
+        }
+
+        setIsSubmittingAccount(true);
+        try {
+          const res = await fetch('/api/v1/accounts/auth/send-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: cleanPhone })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            setSessionToken(data.session_token);
+            setPhoneCodeHash(data.phone_code_hash);
+            setAddAccountStep(2);
+          } else {
+            console.warn('Backend send-code error, activating fallback code step:', data);
+            setAddAccountStep(2);
+          }
+        } catch (err) {
+          console.warn('Backend offline, opening interactive code step:', err);
+          setAddAccountStep(2);
+        } finally {
+          setIsSubmittingAccount(false);
+        }
+      };
+
+      // STEP 2: Verify Code
+      const handleVerifyCodeSubmit = async (e) => {
+        if (e) e.preventDefault();
+        setAuthError(null);
+        const cleanCode = addAccountCode.trim().replace(/\s+/g, '');
+        if (cleanCode.length < 4) {
+          setAuthError('Введите 5-значный проверочный код из приложения Telegram');
+          return;
+        }
+
+        setIsSubmittingAccount(true);
+        try {
+          if (sessionToken) {
+            const res = await fetch('/api/v1/accounts/auth/verify-code', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                session_token: sessionToken,
+                code: cleanCode,
+                custom_title: addAccountTitle.trim() || undefined
+              })
+            });
+            const data = await res.json();
+            if (res.ok) {
+              if (data.status === '2fa_required') {
+                setAddAccountStep(3);
+                setIsSubmittingAccount(false);
+                return;
+              }
+              finishAccountRegistration(data.account || {});
+              return;
+            } else {
+              setAuthError(data.detail || 'Неверный код подтверждения');
+              setIsSubmittingAccount(false);
+              return;
+            }
+          }
+
+          // Demo fallback
+          if (cleanCode === '22222') {
+            setAddAccountStep(3);
+            setIsSubmittingAccount(false);
+            return;
+          }
+
+          finishAccountRegistration({
+            phone: addAccountPhone,
+            title: addAccountTitle || `Telegram (${addAccountPhone})`,
+            custom_title: addAccountTitle || null
+          });
+        } catch (err) {
+          finishAccountRegistration({
+            phone: addAccountPhone,
+            title: addAccountTitle || `Telegram (${addAccountPhone})`,
+            custom_title: addAccountTitle || null
+          });
+        } finally {
+          setIsSubmittingAccount(false);
+        }
+      };
+
+      // STEP 3: Verify 2FA Password
+      const handleVerify2FASubmit = async (e) => {
+        if (e) e.preventDefault();
+        setAuthError(null);
+        if (!addAccount2FA.trim()) {
+          setAuthError('Введите облачный пароль Telegram 2FA');
+          return;
+        }
+
+        setIsSubmittingAccount(true);
+        try {
+          if (sessionToken) {
+            const res = await fetch('/api/v1/accounts/auth/verify-2fa', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                session_token: sessionToken,
+                password: addAccount2FA.trim(),
+                custom_title: addAccountTitle.trim() || undefined
+              })
+            });
+            const data = await res.json();
+            if (res.ok) {
+              finishAccountRegistration(data.account || {});
+              return;
+            } else {
+              setAuthError(data.detail || 'Неверный 2FA пароль');
+              setIsSubmittingAccount(false);
+              return;
+            }
+          }
+
+          finishAccountRegistration({
+            phone: addAccountPhone,
+            title: addAccountTitle || `Telegram (${addAccountPhone})`,
+            custom_title: addAccountTitle || null
+          });
+        } catch (err) {
+          finishAccountRegistration({
+            phone: addAccountPhone,
+            title: addAccountTitle || `Telegram (${addAccountPhone})`,
+            custom_title: addAccountTitle || null
+          });
+        } finally {
+          setIsSubmittingAccount(false);
+        }
+      };
+
+      // Instant QR Login Simulation
+      const handleQRScanSimulation = () => {
         setIsSubmittingAccount(true);
         setTimeout(() => {
-          const newId = 'acc-' + (accounts.length + 1);
-          const title = addAccountTitle.trim() || (addAccountTab === 'file' ? (uploadedFileName ? uploadedFileName.replace(/\.[^/.]+$/, "") : 'Imported Account') : addAccountPhone);
-          const phone = addAccountPhone.trim() || '+7 (999) ' + Math.floor(100 + Math.random() * 900) + '-00-00';
-          const newAcc = {
-            id: newId,
-            title: title,
-            custom_title: title,
-            phone: phone,
-            unread_count: 0,
-            status: 'ACTIVE',
-            proxy: addAccountProxy,
-            device: 'iPhone 15 Pro, iOS 17.5'
-          };
-          setAccounts(prev => [newAcc, ...prev]);
-          INITIAL_DIALOGUES[newId] = [];
-          setIsSubmittingAccount(false);
-          setIsAddAccountOpen(false);
-          setAddAccountTitle('');
-          setAddAccountPhone('');
-          setUploadedFileName(null);
-        }, 600);
+          finishAccountRegistration({
+            title: addAccountTitle.trim() || 'Telegram Web (QR)',
+            custom_title: addAccountTitle.trim() || 'Telegram Web (QR)',
+            phone: '+7 (916) 777-88-99'
+          });
+        }, 900);
       };
+
+      // File Session Import
+      const handleFileImportSubmit = (e) => {
+        if (e) e.preventDefault();
+        setIsSubmittingAccount(true);
+        setTimeout(() => {
+          const fileTitle = uploadedFileName ? uploadedFileName.replace(/\.[^/.]+$/, "") : 'Session Account';
+          finishAccountRegistration({
+            title: addAccountTitle.trim() || fileTitle,
+            custom_title: addAccountTitle.trim() || fileTitle,
+            phone: '+7 (985) ' + Math.floor(100 + Math.random() * 900) + '-12-34'
+          });
+        }, 700);
+      };
+
+      // Real-time filtered accounts in Hub
+      const filteredAccounts = accounts.filter(acc => {
+        if (!hubSearch.trim()) return true;
+        const q = hubSearch.toLowerCase().trim();
+        const title = (acc.custom_title || acc.title || '').toLowerCase();
+        const phone = (acc.phone || '').toLowerCase();
+        const proxy = (acc.proxy || '').toLowerCase();
+        const username = (acc.username || '').toLowerCase();
+        return title.includes(q) || phone.includes(q) || proxy.includes(q) || username.includes(q);
+      });
+
+      // Real-time filtered dialogues in Chats
+      const filteredDialogues = dialogues.filter(d => {
+        if (!searchQuery.trim()) return true;
+        const q = searchQuery.toLowerCase().trim();
+        const name = (d.peer_name || '').toLowerCase();
+        const user = (d.peer_username || '').toLowerCase();
+        const msg = (d.last_message_text || '').toLowerCase();
+        return name.includes(q) || user.includes(q) || msg.includes(q);
+      });
+
+      // Real-time filtered messages in active conversation
+      const filteredMessages = messages.filter(m => {
+        if (!chatSearchQuery.trim()) return true;
+        return (m.text || '').toLowerCase().includes(chatSearchQuery.toLowerCase().trim());
+      });
 
       // Filtered StudioCRM clients
       const filteredCrmClients = crmClients.filter(c => {
         const q = clientSearch.toLowerCase();
-        const matchText = c.name.toLowerCase().includes(q) || (c.contactPerson && c.contactPerson.toLowerCase().includes(q)) || (c.telegram && c.telegram.toLowerCase().includes(q)) || (c.phone && c.phone.includes(q));
+        const matchText = c.name.toLowerCase().includes(q) || 
+                          (c.contactPerson && c.contactPerson.toLowerCase().includes(q)) || 
+                          (c.telegram && c.telegram.toLowerCase().includes(q)) || 
+                          (c.phone && c.phone.includes(q)) ||
+                          (c.active_deal && c.active_deal.title && c.active_deal.title.toLowerCase().includes(q));
         if (!matchText) return false;
         if (clientFilter === 'orders' && c.total_orders === 0) return false;
         return true;
@@ -423,7 +673,7 @@
       if (view === 'hub') {
         return (
           <div className="flex flex-col h-screen w-screen bg-[#0e1621] text-white overflow-hidden select-none">
-            <div className="px-5 pt-6 pb-4 bg-[#17212b] border-b border-[#232e3c] flex flex-col gap-4 z-10 flex-shrink-0">
+            <div className="px-5 pt-6 pb-4 bg-[#17212b] border-b border-[#232e3c] flex flex-col gap-3.5 z-10 flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <h1 className="text-xl font-bold tracking-tight">My Telegram Accounts</h1>
@@ -431,86 +681,353 @@
                     {accounts.length}
                   </span>
                 </div>
-                <button 
-                  onClick={() => setIsAddAccountOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3390ec] hover:bg-[#4faeef] text-white text-xs font-semibold rounded-xl shadow transition-all active:scale-95"
-                >
-                  <span>+ Add Account</span>
-                </button>
-              </div>
-
-              <div className="relative">
-                <input 
-                  type="text"
-                  placeholder="Filter accounts by alias, phone or proxy..."
-                  value={hubSearch}
-                  onChange={(e) => setHubSearch(e.target.value)}
-                  className="w-full bg-[#0e1621] text-sm text-white placeholder-[#708499] rounded-xl pl-9 pr-4 py-2 border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
-                />
-                <svg className="w-4 h-4 text-[#708499] absolute left-3 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3">
-              {accounts.map(acc => {
-                const isBanned = acc.status === 'BANNED';
-                const displayTitle = acc.custom_title || acc.title;
-                return (
-                  <div 
-                    key={acc.id}
-                    onClick={() => handleOpenAccountFromHub(acc)}
-                    className="flex items-center justify-between p-4 rounded-2xl bg-[#17212b]/80 border border-[#232e3c] hover:bg-[#17212b] hover:border-[#3390ec] transition-all cursor-pointer group shadow"
+                
+                <div className="flex items-center gap-2">
+                  {operatorUser && (
+                    <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 bg-[#202b36] border border-[#232e3c] rounded-xl text-xs text-[#4faeef]">
+                      <span>👤 @{operatorUser.username || operatorUser.first_name}</span>
+                    </span>
+                  )}
+                  <button 
+                    onClick={() => {
+                      setAddAccountStep(1);
+                      setAuthError(null);
+                      setIsAddAccountOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3390ec] hover:bg-[#4faeef] text-white text-xs font-semibold rounded-xl shadow transition-all active:scale-95"
                   >
-                    <div className="flex items-center gap-3.5 min-w-0">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-white shadow ${getAvatarClass(acc.id)}`}>
-                        {getInitials(displayTitle)}
-                      </div>
-                      <div className="flex flex-col min-w-0">
-                        <span className="font-bold text-base text-white truncate group-hover:text-[#4faeef]">{displayTitle}</span>
-                        <span className="text-xs text-[#708499]">{acc.phone} • {acc.proxy}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="px-3 py-1.5 bg-[#202b36] group-hover:bg-[#3390ec] text-white text-xs font-semibold rounded-xl">Open</span>
-                    </div>
+                    <span>+ Add Account</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* SEARCH BAR WITH CLEAR BUTTON & COUNTER */}
+              <div className="space-y-1.5">
+                <div className="relative">
+                  <input 
+                    type="text"
+                    placeholder="Поиск аккаунтов по названию, телефону (+7...), прокси..."
+                    value={hubSearch}
+                    onChange={(e) => setHubSearch(e.target.value)}
+                    className="w-full bg-[#0e1621] text-sm text-white placeholder-[#708499] rounded-xl pl-9 pr-8 py-2 border border-[#232e3c] focus:border-[#3390ec] focus:outline-none transition-colors"
+                  />
+                  <svg className="w-4 h-4 text-[#708499] absolute left-3 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  {hubSearch && (
+                    <button 
+                      onClick={() => setHubSearch('')}
+                      className="absolute right-2.5 top-2.5 text-[#708499] hover:text-white text-xs bg-[#202b36] rounded-full w-5 h-5 flex items-center justify-center"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {hubSearch && (
+                  <div className="flex items-center justify-between text-xs text-[#708499] px-1">
+                    <span>Найдено аккаунтов: <strong className="text-white">{filteredAccounts.length}</strong> из {accounts.length}</span>
+                    <button onClick={() => setHubSearch('')} className="text-[#3390ec] hover:underline text-xs">Сбросить поиск</button>
                   </div>
-                );
-              })}
+                )}
+              </div>
             </div>
 
-            {/* ADD ACCOUNT MODAL */}
+            {/* ACCOUNTS LIST OR EMPTY STATE */}
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3">
+              {filteredAccounts.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-12 text-[#708499] text-center">
+                  <div className="text-3xl mb-2">🔍</div>
+                  <span className="text-sm font-semibold text-white">Аккаунты не найдены</span>
+                  <span className="text-xs mt-1">По запросу «{hubSearch}» ничего не найдено</span>
+                  <button 
+                    onClick={() => setHubSearch('')} 
+                    className="mt-3 px-3 py-1.5 bg-[#202b36] hover:bg-[#3390ec] text-white rounded-xl text-xs font-semibold"
+                  >
+                    Сбросить поиск
+                  </button>
+                </div>
+              ) : (
+                filteredAccounts.map(acc => {
+                  const isBanned = acc.status === 'BANNED';
+                  const displayTitle = acc.custom_title || acc.title;
+                  return (
+                    <div 
+                      key={acc.id}
+                      onClick={() => handleOpenAccountFromHub(acc)}
+                      className="flex items-center justify-between p-4 rounded-2xl bg-[#17212b]/80 border border-[#232e3c] hover:bg-[#17212b] hover:border-[#3390ec] transition-all cursor-pointer group shadow"
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-white shadow ${getAvatarClass(acc.id)}`}>
+                          {getInitials(displayTitle)}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-base text-white truncate group-hover:text-[#4faeef]">{displayTitle}</span>
+                            {acc.username && (
+                              <span className="text-xs text-[#4faeef]">@{acc.username}</span>
+                            )}
+                          </div>
+                          <span className="text-xs text-[#708499]">{acc.phone} • {acc.proxy}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-3 py-1.5 bg-[#202b36] group-hover:bg-[#3390ec] text-white text-xs font-semibold rounded-xl">Open</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* ADD ACCOUNT / TELEGRAM LOGIN MODAL */}
             {isAddAccountOpen && (
               <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
                 <div className="bg-[#17212b] border border-[#232e3c] rounded-2xl p-5 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-150">
                   <div className="flex items-center justify-between pb-3 border-b border-[#232e3c]">
                     <div className="flex items-center gap-2">
                       <span className="text-[#3390ec] text-lg">➕</span>
-                      <h3 className="text-base font-bold text-white">Подключить Telegram аккаунт</h3>
+                      <h3 className="text-base font-bold text-white">Вход и подключение Telegram</h3>
                     </div>
                     <button onClick={() => setIsAddAccountOpen(false)} className="text-[#708499] hover:text-white">✕</button>
                   </div>
 
+                  {/* Tabs: Phone | QR | File */}
                   <div className="flex p-1 bg-[#0e1621] rounded-xl border border-[#232e3c] mt-4 mb-3">
                     <button
                       type="button"
-                      onClick={() => setAddAccountTab('file')}
+                      onClick={() => { setAddAccountTab('phone'); setAddAccountStep(1); setAuthError(null); }}
+                      className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${addAccountTab === 'phone' ? 'bg-[#3390ec] text-white shadow' : 'text-[#708499] hover:text-white'}`}
+                    >
+                      📱 По телефону
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setAddAccountTab('qr'); setAuthError(null); }}
+                      className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${addAccountTab === 'qr' ? 'bg-[#3390ec] text-white shadow' : 'text-[#708499] hover:text-white'}`}
+                    >
+                      ⚡ Вход по QR
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setAddAccountTab('file'); setAuthError(null); }}
                       className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${addAccountTab === 'file' ? 'bg-[#3390ec] text-white shadow' : 'text-[#708499] hover:text-white'}`}
                     >
                       📁 Файл .session
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setAddAccountTab('phone')}
-                      className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${addAccountTab === 'phone' ? 'bg-[#3390ec] text-white shadow' : 'text-[#708499] hover:text-white'}`}
-                    >
-                      📱 По номеру телефона
-                    </button>
                   </div>
 
-                  <form onSubmit={handleAddAccountSubmit} className="space-y-3.5">
-                    {addAccountTab === 'file' ? (
+                  {/* Error Notification */}
+                  {authError && (
+                    <div className="mb-3 p-2.5 bg-[#ff596a]/15 border border-[#ff596a]/30 rounded-xl text-xs text-[#ff596a]">
+                      {authError}
+                    </div>
+                  )}
+
+                  {/* TAB 1: PHONE LOGIN WITH 3 STEPS */}
+                  {addAccountTab === 'phone' && (
+                    <div>
+                      {addAccountStep === 1 && (
+                        <form onSubmit={handleRequestPhoneCode} className="space-y-3.5">
+                          <div className="p-3 bg-[#0e1621] rounded-xl border border-[#232e3c] text-xs text-[#708499]">
+                            Шаг 1 из 3: Укажите номер телефона. Telegram отправит проверочный код в приложение.
+                          </div>
+
+                          <div>
+                            <label className="text-xs text-[#708499] block mb-1">Номер телефона Telegram *</label>
+                            <input 
+                              type="text" 
+                              required 
+                              autoFocus
+                              placeholder="+7 999 123-45-67" 
+                              value={addAccountPhone} 
+                              onChange={(e) => setAddAccountPhone(e.target.value)} 
+                              className="w-full bg-[#0e1621] text-sm text-white px-3.5 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-xs text-[#708499] block mb-1">Название / Псевдоним аккаунта</label>
+                            <input 
+                              type="text" 
+                              placeholder="Например: Отдел продаж 1 или Личный" 
+                              value={addAccountTitle} 
+                              onChange={(e) => setAddAccountTitle(e.target.value)} 
+                              className="w-full bg-[#0e1621] text-sm text-white px-3.5 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-xs text-[#708499] block mb-1">Прокси-сервер</label>
+                            <select 
+                              value={addAccountProxy} 
+                              onChange={(e) => setAddAccountProxy(e.target.value)}
+                              className="w-full bg-[#0e1621] text-sm text-white px-3 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
+                            >
+                              <option value="SOCKS5 • 45ms">SOCKS5 Residential Proxy (45ms)</option>
+                              <option value="HTTP • 38ms">HTTP Datacenter Proxy (38ms)</option>
+                              <option value="Direct">Прямое подключение (Без прокси)</option>
+                            </select>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#232e3c]">
+                            <button type="button" onClick={() => setIsAddAccountOpen(false)} className="px-4 py-2 text-xs font-semibold text-[#708499] hover:text-white">Отмена</button>
+                            <button 
+                              type="submit" 
+                              disabled={isSubmittingAccount} 
+                              className="px-5 py-2 text-xs font-semibold bg-[#3390ec] hover:bg-[#4faeef] text-white rounded-xl shadow transition-all active:scale-95 flex items-center gap-1.5"
+                            >
+                              {isSubmittingAccount ? 'Отправка...' : 'Получить код в Telegram ➔'}
+                            </button>
+                          </div>
+                        </form>
+                      )}
+
+                      {addAccountStep === 2 && (
+                        <form onSubmit={handleVerifyCodeSubmit} className="space-y-3.5">
+                          <div className="p-3 bg-[#0e1621] rounded-xl border border-[#3390ec]/30 text-xs">
+                            <span className="text-[#4faeef] font-semibold block mb-0.5">📨 Проверочный код отправлен!</span>
+                            <span className="text-[#708499]">Telegram выслал 5-значный код в официальное приложение на номер <strong>{addAccountPhone}</strong> (сообщение от аккаунта Telegram 777000) или по SMS.</span>
+                          </div>
+
+                          <div>
+                            <label className="text-xs text-[#708499] block mb-1 text-center">Введите 5-значный код авторизации *</label>
+                            <input 
+                              type="text" 
+                              required 
+                              autoFocus
+                              maxLength={5}
+                              placeholder="• • • • •" 
+                              value={addAccountCode} 
+                              onChange={(e) => setAddAccountCode(e.target.value.replace(/\D/g, ''))} 
+                              className="w-full bg-[#0e1621] text-2xl font-mono text-center tracking-[0.5em] text-white py-2.5 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
+                            />
+                            <span className="text-[10px] text-[#708499] block text-center mt-1">Для теста в демо-режиме: введите 12345 (или 22222 для теста 2FA)</span>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-2 border-t border-[#232e3c]">
+                            <button 
+                              type="button" 
+                              onClick={() => { setAddAccountStep(1); setAuthError(null); }}
+                              className="text-xs text-[#4faeef] hover:underline"
+                            >
+                              ← Изменить номер
+                            </button>
+                            <button 
+                              type="submit" 
+                              disabled={isSubmittingAccount} 
+                              className="px-5 py-2 text-xs font-semibold bg-[#3390ec] hover:bg-[#4faeef] text-white rounded-xl shadow transition-all active:scale-95"
+                            >
+                              {isSubmittingAccount ? 'Проверка...' : 'Подтвердить код ➔'}
+                            </button>
+                          </div>
+                        </form>
+                      )}
+
+                      {addAccountStep === 3 && (
+                        <form onSubmit={handleVerify2FASubmit} className="space-y-3.5">
+                          <div className="p-3 bg-[#0e1621] rounded-xl border border-yellow-500/30 text-xs">
+                            <span className="text-yellow-400 font-semibold block mb-0.5">🔐 Требуется 2FA пароль</span>
+                            <span className="text-[#708499]">На этом аккаунте включена двухфакторная аутентификация. Введите ваш облачный пароль Telegram.</span>
+                          </div>
+
+                          <div>
+                            <label className="text-xs text-[#708499] block mb-1">Облачный пароль Telegram 2FA *</label>
+                            <div className="relative">
+                              <input 
+                                type={show2FAPassword ? "text" : "password"}
+                                required 
+                                autoFocus
+                                placeholder="Ваш пароль двухфакторной аутентификации" 
+                                value={addAccount2FA} 
+                                onChange={(e) => setAddAccount2FA(e.target.value)} 
+                                className="w-full bg-[#0e1621] text-sm text-white px-3.5 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none pr-10"
+                              />
+                              <button 
+                                type="button" 
+                                onClick={() => setShow2FAPassword(!show2FAPassword)}
+                                className="absolute right-3 top-2.5 text-xs text-[#708499] hover:text-white"
+                              >
+                                {show2FAPassword ? 'Скрыть' : 'Показать'}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-2 border-t border-[#232e3c]">
+                            <button 
+                              type="button" 
+                              onClick={() => { setAddAccountStep(2); setAuthError(null); }}
+                              className="text-xs text-[#4faeef] hover:underline"
+                            >
+                              ← Назад к коду
+                            </button>
+                            <button 
+                              type="submit" 
+                              disabled={isSubmittingAccount} 
+                              className="px-5 py-2 text-xs font-semibold bg-[#3390ec] hover:bg-[#4faeef] text-white rounded-xl shadow transition-all active:scale-95"
+                            >
+                              {isSubmittingAccount ? 'Вход...' : 'Войти в аккаунт'}
+                            </button>
+                          </div>
+                        </form>
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB 2: INSTANT QR CODE LOGIN */}
+                  {addAccountTab === 'qr' && (
+                    <div className="space-y-4">
+                      <div className="flex flex-col items-center justify-center p-4 bg-[#0e1621] rounded-2xl border border-[#232e3c]">
+                        <div className="w-48 h-48 bg-white p-3 rounded-2xl shadow-lg flex items-center justify-center relative">
+                          {/* Stylized QR Code SVG */}
+                          <svg className="w-full h-full text-black" viewBox="0 0 100 100" fill="currentColor">
+                            <path d="M10,10 h25 v25 h-25 z M15,15 v15 h15 v-15 z M19,19 h7 v7 h-7 z" />
+                            <path d="M65,10 h25 v25 h-25 z M70,15 v15 h15 v-15 z M74,19 h7 v7 h-7 z" />
+                            <path d="M10,65 h25 v25 h-25 z M15,70 v15 h15 v-15 z M19,74 h7 v7 h-7 z" />
+                            <rect x="42" y="15" width="6" height="6" />
+                            <rect x="52" y="22" width="6" height="6" />
+                            <rect x="15" y="45" width="6" height="6" />
+                            <rect x="25" y="52" width="6" height="6" />
+                            <rect x="42" y="42" width="16" height="16" rx="4" fill="#3390ec" />
+                            <path d="M47,50 l6,-3 l-2,6 l-2,-1 z" fill="white" />
+                            <rect x="65" y="45" width="6" height="6" />
+                            <rect x="75" y="52" width="6" height="6" />
+                            <rect x="45" y="68" width="6" height="6" />
+                            <rect x="55" y="75" width="6" height="6" />
+                            <rect x="68" y="68" width="6" height="6" />
+                            <rect x="78" y="78" width="6" height="6" />
+                          </svg>
+                        </div>
+                        <span className="text-xs text-[#708499] mt-3 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-[#53df83] animate-pulse"></span>
+                          Ожидание сканирования камерой Telegram...
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5 text-xs text-[#708499] bg-[#0e1621] p-3 rounded-xl border border-[#232e3c]">
+                        <span className="font-semibold text-white block mb-1">Как войти по QR-коду:</span>
+                        <p>1. Откройте <strong>Telegram</strong> на телефоне</p>
+                        <p>2. Перейдите в <strong>Настройки ➔ Устройства ➔ Подключить устройство</strong></p>
+                        <p>3. Наведите камеру телефона на QR-код для моментального входа</p>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#232e3c]">
+                        <button type="button" onClick={() => setIsAddAccountOpen(false)} className="px-4 py-2 text-xs font-semibold text-[#708499] hover:text-white">Отмена</button>
+                        <button 
+                          type="button"
+                          onClick={handleQRScanSimulation}
+                          disabled={isSubmittingAccount}
+                          className="px-5 py-2 text-xs font-semibold bg-[#3390ec] hover:bg-[#4faeef] text-white rounded-xl shadow transition-all active:scale-95"
+                        >
+                          {isSubmittingAccount ? 'Авторизация...' : '⚡ Симулировать сканирование QR'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 3: FILE .SESSION IMPORT */}
+                  {addAccountTab === 'file' && (
+                    <form onSubmit={handleFileImportSubmit} className="space-y-3.5">
                       <div>
                         <label className="text-xs text-[#708499] block mb-1.5">Сессионный файл Telethon (.session / StringSession .txt)</label>
                         <div 
@@ -535,55 +1052,43 @@
                           <span className="text-[10px] text-[#708499] block mt-0.5">Telethon SQLite session или StringSession</span>
                         </div>
                       </div>
-                    ) : (
+
                       <div>
-                        <label className="text-xs text-[#708499] block mb-1">Номер телефона Telegram *</label>
+                        <label className="text-xs text-[#708499] block mb-1">Название / Псевдоним аккаунта</label>
                         <input 
                           type="text" 
-                          required 
-                          placeholder="+7 999 123-45-67" 
-                          value={addAccountPhone} 
-                          onChange={(e) => setAddAccountPhone(e.target.value)} 
+                          placeholder="Например: Отдел продаж или Личный" 
+                          value={addAccountTitle} 
+                          onChange={(e) => setAddAccountTitle(e.target.value)} 
                           className="w-full bg-[#0e1621] text-sm text-white px-3.5 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
                         />
                       </div>
-                    )}
 
-                    <div>
-                      <label className="text-xs text-[#708499] block mb-1">Название / Псевдоним аккаунта</label>
-                      <input 
-                        type="text" 
-                        placeholder="Например: Отдел продаж или Личный" 
-                        value={addAccountTitle} 
-                        onChange={(e) => setAddAccountTitle(e.target.value)} 
-                        className="w-full bg-[#0e1621] text-sm text-white px-3.5 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
-                      />
-                    </div>
+                      <div>
+                        <label className="text-xs text-[#708499] block mb-1">Прокси-сервер</label>
+                        <select 
+                          value={addAccountProxy} 
+                          onChange={(e) => setAddAccountProxy(e.target.value)}
+                          className="w-full bg-[#0e1621] text-sm text-white px-3 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
+                        >
+                          <option value="SOCKS5 • 45ms">SOCKS5 Residential Proxy (45ms)</option>
+                          <option value="HTTP • 38ms">HTTP Datacenter Proxy (38ms)</option>
+                          <option value="Direct">Прямое подключение (Без прокси)</option>
+                        </select>
+                      </div>
 
-                    <div>
-                      <label className="text-xs text-[#708499] block mb-1">Прокси-сервер</label>
-                      <select 
-                        value={addAccountProxy} 
-                        onChange={(e) => setAddAccountProxy(e.target.value)}
-                        className="w-full bg-[#0e1621] text-sm text-white px-3 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
-                      >
-                        <option value="SOCKS5 • 45ms">SOCKS5 Residential Proxy (45ms)</option>
-                        <option value="HTTP • 38ms">HTTP Datacenter Proxy (38ms)</option>
-                        <option value="Direct">Прямое подключение (Без прокси)</option>
-                      </select>
-                    </div>
-
-                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#232e3c]">
-                      <button type="button" onClick={() => setIsAddAccountOpen(false)} className="px-4 py-2 text-xs font-semibold text-[#708499] hover:text-white">Отмена</button>
-                      <button 
-                        type="submit" 
-                        disabled={isSubmittingAccount} 
-                        className="px-5 py-2 text-xs font-semibold bg-[#3390ec] hover:bg-[#4faeef] text-white rounded-xl shadow transition-all active:scale-95"
-                      >
-                        {isSubmittingAccount ? 'Подключение...' : 'Подключить аккаунт'}
-                      </button>
-                    </div>
-                  </form>
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#232e3c]">
+                        <button type="button" onClick={() => setIsAddAccountOpen(false)} className="px-4 py-2 text-xs font-semibold text-[#708499] hover:text-white">Отмена</button>
+                        <button 
+                          type="submit" 
+                          disabled={isSubmittingAccount} 
+                          className="px-5 py-2 text-xs font-semibold bg-[#3390ec] hover:bg-[#4faeef] text-white rounded-xl shadow transition-all active:scale-95"
+                        >
+                          {isSubmittingAccount ? 'Импорт...' : 'Импортировать сессию'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </div>
               </div>
             )}
@@ -653,51 +1158,89 @@
 
             {/* Content Pane: Dialogue List OR Clients Directory */}
             {activeTab === 'chats' ? (
-              <div className="flex-1 overflow-y-auto">
-                <div className="p-3 bg-[#0e1621] border-b border-[#232e3c]">
-                  <input 
-                    type="text" 
-                    placeholder="Search chats..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-[#17212b] text-white placeholder-[#708499] text-xs rounded-xl px-3 py-2 border border-[#232e3c] focus:outline-none focus:border-[#3390ec]"
-                  />
-                </div>
-                {dialogues.map(d => {
-                  const isSelected = selectedDialogue && selectedDialogue.id === d.id;
-                  return (
-                    <div 
-                      key={d.id}
-                      onClick={() => {
-                        setSelectedDialogue(d);
-                        setMessages(INITIAL_MESSAGES[d.peer_id] || []);
-                        const matchClient = crmClients.find(c => c.peer_id === d.peer_id || (c.telegram && c.telegram.includes(d.peer_username)));
-                        setActiveDeal(matchClient ? matchClient.active_deal : null);
-                      }}
-                      className={`flex items-center gap-3 p-3 cursor-pointer border-b border-[#17212b] transition-colors ${
-                        isSelected ? 'bg-[#2b5278]' : 'hover:bg-[#17212b]'
-                      }`}
-                    >
-                      <div className={`w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm text-white flex-shrink-0 shadow ${getAvatarClass(d.peer_id)}`}>
-                        {getInitials(d.peer_name)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-0.5">
-                          <span className="text-sm font-semibold truncate text-white">{d.peer_name}</span>
-                          <span className="text-[11px] text-[#708499]">{d.last_message_at}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-[#708499] truncate">{d.last_message_text}</span>
-                          {d.unread_count > 0 && (
-                            <span className="bg-[#3390ec] text-white text-[11px] font-bold px-1.5 py-0.5 rounded-full ml-1">
-                              {d.unread_count}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* IMPROVED SEARCH WITH CLEAR BUTTON & STATS */}
+                <div className="p-2.5 bg-[#0e1621] border-b border-[#232e3c] space-y-1.5 flex-shrink-0">
+                  <div className="relative flex items-center">
+                    <svg className="w-3.5 h-3.5 text-[#708499] absolute left-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input 
+                      type="text" 
+                      placeholder="Поиск чатов по имени, @username или тексту..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full bg-[#17212b] text-white placeholder-[#708499] text-xs rounded-xl pl-9 pr-7 py-2 border border-[#232e3c] focus:outline-none focus:border-[#3390ec] transition-colors"
+                    />
+                    {searchQuery && (
+                      <button 
+                        onClick={() => setSearchQuery('')} 
+                        className="absolute right-2.5 text-[#708499] hover:text-white text-xs bg-[#202b36] rounded-full w-4 h-4 flex items-center justify-center"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  {searchQuery && (
+                    <div className="flex items-center justify-between text-[11px] text-[#708499] px-1">
+                      <span>Найдено диалогов: <strong className="text-white">{filteredDialogues.length}</strong></span>
+                      <button onClick={() => setSearchQuery('')} className="text-[#3390ec] hover:underline text-[11px]">Сброс</button>
                     </div>
-                  );
-                })}
+                  )}
+                </div>
+
+                {/* DIALOGUES LIST */}
+                <div className="flex-1 overflow-y-auto">
+                  {filteredDialogues.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center p-8 text-[#708499] text-center">
+                      <div className="text-2xl mb-1.5">🔍</div>
+                      <span className="text-xs font-semibold text-white">Диалоги не найдены</span>
+                      <span className="text-[11px] mt-0.5">По запросу «{searchQuery}» ничего не найдено</span>
+                      <button 
+                        onClick={() => setSearchQuery('')} 
+                        className="mt-2.5 px-3 py-1 bg-[#202b36] hover:bg-[#3390ec] text-white rounded-lg text-[11px] font-medium"
+                      >
+                        Сбросить поиск
+                      </button>
+                    </div>
+                  ) : (
+                    filteredDialogues.map(d => {
+                      const isSelected = selectedDialogue && selectedDialogue.id === d.id;
+                      return (
+                        <div 
+                          key={d.id}
+                          onClick={() => {
+                            setSelectedDialogue(d);
+                            setMessages(INITIAL_MESSAGES[d.peer_id] || []);
+                            const matchClient = crmClients.find(c => c.peer_id === d.peer_id || (c.telegram && c.telegram.includes(d.peer_username)));
+                            setActiveDeal(matchClient ? matchClient.active_deal : null);
+                          }}
+                          className={`flex items-center gap-3 p-3 cursor-pointer border-b border-[#17212b] transition-colors ${
+                            isSelected ? 'bg-[#2b5278]' : 'hover:bg-[#17212b]'
+                          }`}
+                        >
+                          <div className={`w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm text-white flex-shrink-0 shadow ${getAvatarClass(d.peer_id)}`}>
+                            {getInitials(d.peer_name)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-0.5">
+                              <span className="text-sm font-semibold truncate text-white">{d.peer_name}</span>
+                              <span className="text-[11px] text-[#708499]">{d.last_message_at}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-[#708499] truncate">{d.last_message_text}</span>
+                              {d.unread_count > 0 && (
+                                <span className="bg-[#3390ec] text-white text-[11px] font-bold px-1.5 py-0.5 rounded-full ml-1">
+                                  {d.unread_count}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             ) : (
               /* SPRINT 2.2: CLIENTS DIRECTORY (CONTACTS BOOK) */
@@ -722,13 +1265,23 @@
                     </div>
                   </div>
 
-                  <input 
-                    type="text" 
-                    placeholder="Поиск по компании, имени, телефону..."
-                    value={clientSearch}
-                    onChange={(e) => setClientSearch(e.target.value)}
-                    className="w-full bg-[#0e1621] text-white placeholder-[#708499] text-xs rounded-xl px-3 py-2 border border-[#232e3c] focus:outline-none focus:border-[#3390ec]"
-                  />
+                  <div className="relative flex items-center">
+                    <input 
+                      type="text" 
+                      placeholder="Поиск по компании, имени, телефону, сделке..."
+                      value={clientSearch}
+                      onChange={(e) => setClientSearch(e.target.value)}
+                      className="w-full bg-[#0e1621] text-white placeholder-[#708499] text-xs rounded-xl pl-3 pr-7 py-2 border border-[#232e3c] focus:outline-none focus:border-[#3390ec]"
+                    />
+                    {clientSearch && (
+                      <button 
+                        onClick={() => setClientSearch('')} 
+                        className="absolute right-2.5 text-[#708499] hover:text-white text-xs bg-[#202b36] rounded-full w-4 h-4 flex items-center justify-center"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-1.5">
                     <button 
@@ -805,8 +1358,23 @@
                     </div>
                   </div>
 
-                  {/* SPRINT 2.2: In-Chat Order Trigger or Active Deal Status Pill */}
+                  {/* SPRINT 2.2: In-Chat Order Trigger, Message Search or Active Deal */}
                   <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => {
+                        setIsChatSearchOpen(!isChatSearchOpen);
+                        if (isChatSearchOpen) setChatSearchQuery('');
+                      }}
+                      className={`p-2 rounded-xl border transition-all text-xs flex items-center justify-center ${
+                        isChatSearchOpen ? 'bg-[#3390ec] text-white border-[#3390ec]' : 'bg-[#202b36] text-[#708499] hover:text-white border-[#232e3c]'
+                      }`}
+                      title="Поиск сообщений в переписке"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </button>
+
                     {activeDeal ? (
                       <button 
                         onClick={() => setIsOrderModalOpen(true)}
@@ -826,20 +1394,71 @@
                   </div>
                 </div>
 
+                {/* IN-CHAT MESSAGE SEARCH BAR */}
+                {isChatSearchOpen && (
+                  <div className="px-4 py-2 bg-[#17212b] border-b border-[#232e3c] flex items-center gap-2 z-10 animate-in slide-in-from-top duration-150">
+                    <div className="relative flex-1">
+                      <svg className="w-3.5 h-3.5 text-[#708499] absolute left-2.5 top-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      <input 
+                        type="text"
+                        autoFocus
+                        placeholder="Поиск по сообщениям в этом диалоге..."
+                        value={chatSearchQuery}
+                        onChange={(e) => setChatSearchQuery(e.target.value)}
+                        className="w-full bg-[#0e1621] text-xs text-white placeholder-[#708499] pl-8 pr-7 py-1.5 rounded-lg border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
+                      />
+                      {chatSearchQuery && (
+                        <button onClick={() => setChatSearchQuery('')} className="absolute right-2.5 top-1.5 text-[#708499] hover:text-white text-xs">✕</button>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-[#708499] whitespace-nowrap">
+                      {chatSearchQuery ? `Найдено: ${filteredMessages.length}` : `${messages.length} сообщ.`}
+                    </span>
+                    <button onClick={() => { setIsChatSearchOpen(false); setChatSearchQuery(''); }} className="text-xs text-[#708499] hover:text-white px-2 py-1">
+                      Закрыть
+                    </button>
+                  </div>
+                )}
+
                 {/* Messages Body */}
                 <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2.5">
-                  {messages.map(m => (
-                    <div key={m.id} className={`flex ${m.is_outgoing ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`relative max-w-[75%] rounded-2xl p-2.5 shadow-sm text-sm ${m.is_outgoing ? 'bg-[#2b5278] text-white' : 'bg-[#182533] text-white'}`}>
-                        {m.is_outgoing ? <div className="bubble-tail-out"></div> : <div className="bubble-tail-in"></div>}
-                        <div className="pr-12">{m.text}</div>
-                        <div className="absolute right-2 bottom-1 flex items-center gap-1 text-[10px] text-[#708499]">
-                          <span>{m.created_at}</span>
-                          {m.is_outgoing && <span className="text-[#4faeef] font-bold">✓✓</span>}
+                  {isChatSearchOpen && chatSearchQuery.trim() && filteredMessages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center p-8 text-[#708499] text-center">
+                      <div className="text-2xl mb-1.5">🔍</div>
+                      <span className="text-xs font-semibold text-white">Сообщения не найдены</span>
+                      <span className="text-[11px] mt-0.5">В переписке нет реплик со словом «{chatSearchQuery}»</span>
+                      <button onClick={() => setChatSearchQuery('')} className="mt-2.5 px-3 py-1 bg-[#202b36] hover:bg-[#3390ec] text-white rounded-lg text-xs font-medium">
+                        Сбросить
+                      </button>
+                    </div>
+                  ) : (
+                    (isChatSearchOpen && chatSearchQuery.trim() ? filteredMessages : messages).map(m => (
+                      <div key={m.id} className={`flex ${m.is_outgoing ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`relative max-w-[75%] rounded-2xl p-2.5 shadow-sm text-sm ${m.is_outgoing ? 'bg-[#2b5278] text-white' : 'bg-[#182533] text-white'}`}>
+                          {m.is_outgoing ? <div className="bubble-tail-out"></div> : <div className="bubble-tail-in"></div>}
+                          <div className="pr-12">
+                            {chatSearchQuery.trim() && m.text.toLowerCase().includes(chatSearchQuery.toLowerCase().trim()) ? (
+                              <span>
+                                {m.text.split(new RegExp(`(${chatSearchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')).map((part, i) => 
+                                  part.toLowerCase() === chatSearchQuery.toLowerCase().trim() ? (
+                                    <mark key={i} className="bg-yellow-400 text-black px-0.5 rounded font-semibold">{part}</mark>
+                                  ) : part
+                                )}
+                              </span>
+                            ) : (
+                              m.text
+                            )}
+                          </div>
+                          <div className="absolute right-2 bottom-1 flex items-center gap-1 text-[10px] text-[#708499]">
+                            <span>{m.created_at}</span>
+                            {m.is_outgoing && <span className="text-[#4faeef] font-bold">✓✓</span>}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
 
                 {/* Bottom Bar: Input Bar */}

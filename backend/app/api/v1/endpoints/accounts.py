@@ -1,6 +1,7 @@
 import os
 import shutil
 import tempfile
+import time
 from typing import List, Dict, Any, Optional
 from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
@@ -9,6 +10,14 @@ from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from telethon import TelegramClient
 from telethon.sessions import StringSession
+from telethon.errors import (
+    SessionPasswordNeededError,
+    PhoneCodeInvalidError,
+    PhoneCodeExpiredError,
+    PasswordHashInvalidError,
+    PhoneNumberInvalidError,
+    FloodWaitError,
+)
 
 from backend.app.core.config import settings
 from backend.app.core.security import encrypt_session_string
@@ -21,6 +30,28 @@ from backend.app.services.mtproto.fingerprint import generate_random_fingerprint
 from backend.app.core.telegram_auth import get_current_tma_user
 
 router = APIRouter(prefix="/accounts", tags=["Accounts"])
+
+# In-memory dictionary for pending auth sessions: session_token -> dict
+PENDING_AUTH_SESSIONS: Dict[str, Dict[str, Any]] = {}
+
+
+class SendCodeRequest(BaseModel):
+    phone: str = Field(..., description="Phone number with country code, e.g. +79991234567")
+    proxy_id: Optional[str] = Field(None, description="Optional UUID of proxy to use")
+
+
+class VerifyCodeRequest(BaseModel):
+    session_token: str = Field(..., description="Token returned by /auth/send-code")
+    code: str = Field(..., description="SMS / Telegram auth code (5-6 digits)")
+    custom_title: Optional[str] = Field(None, description="Optional alias for the account")
+    proxy_id: Optional[str] = Field(None, description="Optional UUID of proxy to use")
+
+
+class Verify2FARequest(BaseModel):
+    session_token: str = Field(..., description="Token returned by /auth/send-code")
+    password: str = Field(..., description="Telegram Cloud 2FA Password")
+    custom_title: Optional[str] = Field(None, description="Optional alias for the account")
+    proxy_id: Optional[str] = Field(None, description="Optional UUID of proxy to use")
 
 
 class AliasUpdateRequest(BaseModel):
@@ -118,6 +149,350 @@ async def reconnect_account(
         "status": client.status.value,
         "is_connected": client.is_connected,
         "success": success,
+    }
+
+
+@router.post("/auth/send-code")
+async def send_telegram_auth_code(
+    payload: SendCodeRequest,
+    db: AsyncSession = Depends(get_db),
+    user_auth: Dict[str, Any] = Depends(get_current_tma_user),
+) -> Dict[str, Any]:
+    """
+    Step 1 of Telegram Phone Auth:
+    Connects to Telegram MTProto and requests a verification code sent to user's Telegram app / SMS.
+    """
+    clean_phone = payload.phone.strip().replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+    if not clean_phone.startswith("+"):
+        clean_phone = "+" + clean_phone
+
+    # Resolve proxy if specified
+    proxy_config = None
+    if payload.proxy_id:
+        try:
+            proxy_uuid = UUID(payload.proxy_id)
+            proxy_stmt = select(Proxy).where(Proxy.id == proxy_uuid)
+            proxy_res = await db.execute(proxy_stmt)
+            proxy_obj = proxy_res.scalar_one_or_none()
+            if proxy_obj:
+                proxy_config = proxy_obj.to_telethon_proxy()
+        except ValueError:
+            pass
+
+    api_id = settings.DEFAULT_TELEGRAM_API_ID or 2040
+    api_hash = settings.DEFAULT_TELEGRAM_API_HASH or "b18441a1ff607e10a989891a5462e627"
+
+    session_inst = StringSession()
+    client = TelegramClient(session_inst, api_id, api_hash, proxy=proxy_config)
+
+    try:
+        await client.connect()
+        sent_code = await client.send_code_request(clean_phone)
+        saved_session = client.session.save()
+    except PhoneNumberInvalidError:
+        await client.disconnect()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The phone number entered is invalid or does not exist on Telegram.",
+        )
+    except FloodWaitError as e:
+        await client.disconnect()
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many attempts. Please wait {e.seconds} seconds before trying again.",
+        )
+    except Exception as exc:
+        await client.disconnect()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to send code via MTProto: {exc}",
+        )
+    finally:
+        await client.disconnect()
+
+    session_token = str(uuid4())
+    PENDING_AUTH_SESSIONS[session_token] = {
+        "phone": clean_phone,
+        "phone_code_hash": sent_code.phone_code_hash,
+        "session_str": saved_session,
+        "proxy_id": payload.proxy_id,
+        "api_id": api_id,
+        "api_hash": api_hash,
+        "created_at": time.time(),
+    }
+
+    return {
+        "status": "code_sent",
+        "session_token": session_token,
+        "phone": clean_phone,
+        "message": f"Verification code sent to Telegram app on {clean_phone}",
+    }
+
+
+@router.post("/auth/verify-code")
+async def verify_telegram_auth_code(
+    payload: VerifyCodeRequest,
+    db: AsyncSession = Depends(get_db),
+    user_auth: Dict[str, Any] = Depends(get_current_tma_user),
+) -> Dict[str, Any]:
+    """
+    Step 2 of Telegram Phone Auth:
+    Verifies the 5-digit code. If 2FA is required, prompts for 2FA password.
+    Otherwise activates the account in MTProto pool and DB.
+    """
+    pending = PENDING_AUTH_SESSIONS.get(payload.session_token)
+    if not pending or (time.time() - pending.get("created_at", 0) > 900):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Authentication session expired or not found. Please request a new code.",
+        )
+
+    proxy_config = None
+    proxy_uuid = None
+    target_proxy_id = payload.proxy_id or pending.get("proxy_id")
+    if target_proxy_id:
+        try:
+            proxy_uuid = UUID(target_proxy_id)
+            proxy_stmt = select(Proxy).where(Proxy.id == proxy_uuid)
+            proxy_res = await db.execute(proxy_stmt)
+            proxy_obj = proxy_res.scalar_one_or_none()
+            if proxy_obj:
+                proxy_config = proxy_obj.to_telethon_proxy()
+        except ValueError:
+            pass
+
+    client = TelegramClient(
+        StringSession(pending["session_str"]),
+        pending["api_id"],
+        pending["api_hash"],
+        proxy=proxy_config,
+    )
+
+    clean_code = payload.code.strip().replace(" ", "").replace("-", "")
+
+    try:
+        await client.connect()
+        try:
+            telegram_user = await client.sign_in(
+                phone=pending["phone"],
+                code=clean_code,
+                phone_code_hash=pending["phone_code_hash"],
+            )
+        except SessionPasswordNeededError:
+            pending["session_str"] = client.session.save()
+            await client.disconnect()
+            return {
+                "status": "2fa_required",
+                "session_token": payload.session_token,
+                "phone": pending["phone"],
+                "message": "2FA Cloud Password is required for this account.",
+            }
+        except (PhoneCodeInvalidError, PhoneCodeExpiredError) as exc:
+            await client.disconnect()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired verification code.",
+            ) from exc
+
+        extracted_string_session = client.session.save()
+        await client.disconnect()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        await client.disconnect()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Telegram sign-in failed: {exc}",
+        )
+
+    phone = pending["phone"]
+    title = payload.custom_title or f"{telegram_user.first_name or ''} {telegram_user.last_name or ''}".strip() or phone
+
+    existing_stmt = select(Account).where(Account.phone == phone)
+    existing_res = await db.execute(existing_stmt)
+    existing_account = existing_res.scalar_one_or_none()
+
+    encrypted_session = encrypt_session_string(
+        extracted_string_session, settings.SECRET_ENCRYPTION_KEY
+    )
+
+    if existing_account:
+        existing_account.title = title
+        existing_account.custom_title = payload.custom_title
+        existing_account.first_name = telegram_user.first_name
+        existing_account.last_name = telegram_user.last_name
+        existing_account.username = telegram_user.username
+        existing_account.telegram_user_id = telegram_user.id
+        existing_account.encrypted_session = encrypted_session
+        existing_account.status = AccountStatus.ACTIVE
+        if proxy_uuid:
+            existing_account.proxy_id = proxy_uuid
+        account_record = existing_account
+    else:
+        account_record = Account(
+            id=uuid4(),
+            phone=phone,
+            title=title,
+            custom_title=payload.custom_title,
+            first_name=telegram_user.first_name,
+            last_name=telegram_user.last_name,
+            username=telegram_user.username,
+            telegram_user_id=telegram_user.id,
+            encrypted_session=encrypted_session,
+            status=AccountStatus.ACTIVE,
+            proxy_id=proxy_uuid,
+            device_fingerprint=generate_random_fingerprint().to_dict(),
+        )
+        db.add(account_record)
+
+    await db.commit()
+    await db.refresh(account_record)
+
+    PENDING_AUTH_SESSIONS.pop(payload.session_token, None)
+
+    pool = MTProtoPoolManager.get_instance()
+    client_inst = await pool.register_account_instance(
+        account_record, raw_session_string=extracted_string_session
+    )
+    await client_inst.connect()
+
+    return {
+        "status": "success",
+        "account": {
+            "id": str(account_record.id),
+            "phone": account_record.phone,
+            "title": account_record.title,
+            "custom_title": account_record.custom_title,
+            "username": account_record.username,
+            "status": client_inst.status.value,
+            "is_connected": client_inst.is_connected,
+        },
+        "message": f"Account {phone} successfully authenticated and connected to Telegram cloud.",
+    }
+
+
+@router.post("/auth/verify-2fa")
+async def verify_telegram_2fa_password(
+    payload: Verify2FARequest,
+    db: AsyncSession = Depends(get_db),
+    user_auth: Dict[str, Any] = Depends(get_current_tma_user),
+) -> Dict[str, Any]:
+    """
+    Step 3 of Telegram Phone Auth:
+    Verifies 2FA cloud password and finalizes account connection.
+    """
+    pending = PENDING_AUTH_SESSIONS.get(payload.session_token)
+    if not pending or (time.time() - pending.get("created_at", 0) > 900):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Authentication session expired or not found. Please request a new code.",
+        )
+
+    proxy_config = None
+    proxy_uuid = None
+    target_proxy_id = payload.proxy_id or pending.get("proxy_id")
+    if target_proxy_id:
+        try:
+            proxy_uuid = UUID(target_proxy_id)
+            proxy_stmt = select(Proxy).where(Proxy.id == proxy_uuid)
+            proxy_res = await db.execute(proxy_stmt)
+            proxy_obj = proxy_res.scalar_one_or_none()
+            if proxy_obj:
+                proxy_config = proxy_obj.to_telethon_proxy()
+        except ValueError:
+            pass
+
+    client = TelegramClient(
+        StringSession(pending["session_str"]),
+        pending["api_id"],
+        pending["api_hash"],
+        proxy=proxy_config,
+    )
+
+    try:
+        await client.connect()
+        try:
+            telegram_user = await client.sign_in(password=payload.password)
+        except PasswordHashInvalidError:
+            await client.disconnect()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid 2FA password. Please check your password and try again.",
+            )
+        extracted_string_session = client.session.save()
+        await client.disconnect()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        await client.disconnect()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"2FA authentication failed: {exc}",
+        )
+
+    phone = pending["phone"]
+    title = payload.custom_title or f"{telegram_user.first_name or ''} {telegram_user.last_name or ''}".strip() or phone
+
+    existing_stmt = select(Account).where(Account.phone == phone)
+    existing_res = await db.execute(existing_stmt)
+    existing_account = existing_res.scalar_one_or_none()
+
+    encrypted_session = encrypt_session_string(
+        extracted_string_session, settings.SECRET_ENCRYPTION_KEY
+    )
+
+    if existing_account:
+        existing_account.title = title
+        existing_account.custom_title = payload.custom_title
+        existing_account.first_name = telegram_user.first_name
+        existing_account.last_name = telegram_user.last_name
+        existing_account.username = telegram_user.username
+        existing_account.telegram_user_id = telegram_user.id
+        existing_account.encrypted_session = encrypted_session
+        existing_account.status = AccountStatus.ACTIVE
+        if proxy_uuid:
+            existing_account.proxy_id = proxy_uuid
+        account_record = existing_account
+    else:
+        account_record = Account(
+            id=uuid4(),
+            phone=phone,
+            title=title,
+            custom_title=payload.custom_title,
+            first_name=telegram_user.first_name,
+            last_name=telegram_user.last_name,
+            username=telegram_user.username,
+            telegram_user_id=telegram_user.id,
+            encrypted_session=encrypted_session,
+            status=AccountStatus.ACTIVE,
+            proxy_id=proxy_uuid,
+            device_fingerprint=generate_random_fingerprint().to_dict(),
+        )
+        db.add(account_record)
+
+    await db.commit()
+    await db.refresh(account_record)
+
+    PENDING_AUTH_SESSIONS.pop(payload.session_token, None)
+
+    pool = MTProtoPoolManager.get_instance()
+    client_inst = await pool.register_account_instance(
+        account_record, raw_session_string=extracted_string_session
+    )
+    await client_inst.connect()
+
+    return {
+        "status": "success",
+        "account": {
+            "id": str(account_record.id),
+            "phone": account_record.phone,
+            "title": account_record.title,
+            "custom_title": account_record.custom_title,
+            "username": account_record.username,
+            "status": client_inst.status.value,
+            "is_connected": client_inst.is_connected,
+        },
+        "message": f"Account {phone} successfully authenticated with 2FA and connected to Telegram cloud.",
     }
 
 

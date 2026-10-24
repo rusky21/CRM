@@ -55,6 +55,12 @@ class Settings(BaseSettings):
         description="Path to local fallback SQLite database for StudioCRM",
     )
 
+    # Multi-Server Split Deployment CORS Configuration
+    FRONTEND_ORIGIN_DOMAIN: str = Field(
+        default="*",
+        description="Allowed CORS origin domain from Server 1 (e.g. crm.domain.com)",
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -76,6 +76,36 @@ cd CRM
 sudo bash install_ubuntu24.sh
 ```
 
+---
+
+## ⚡ Multi-Server Split Architecture (Server 1: Frontend + Server 2: Backend)
+
+For distributed production setups or low-RAM environments (2GB RAM VPS), use the split deployment scripts:
+
+### Step 1: Deploy Server 2 (Backend, Bot, DB & MTProto Pool)
+*Target: VPS with 2GB RAM (Ubuntu 24.04 LTS)*
+```bash
+git clone https://github.com/rusky21/CRM.git
+cd CRM
+sudo bash deploy_backend.sh
+```
+* Automatically creates a 2GB `/swapfile` safeguard to prevent OOM errors.
+* Launches `postgres`, `redis`, `backend` (port 8000), and `bot` with strict container memory limits.
+* Prints your Server 2 Backend API URL: `http://<SERVER2_IP>:8000`.
+
+### Step 2: Deploy Server 1 (Frontend & Mini App Web Hosting)
+*Target: VPS with domain name (Ubuntu 24.04 LTS)*
+```bash
+git clone https://github.com/rusky21/CRM.git
+cd CRM
+sudo bash deploy_frontend.sh
+```
+* Installs Nginx and Certbot.
+* Prompts for your domain (e.g. `crm.myagency.com`) and Server 2 URL (`http://<SERVER2_IP>:8000`).
+* Configures secure reverse proxy for `/api/` with WebSocket upgrade pass-through (eliminates Mixed-Content and CORS issues).
+* Automatically issues Let's Encrypt SSL certificate.
+* Prints your official Mini App URL: `https://<YOUR_DOMAIN>/preview.html`.
+
 The script automatically:
 1. Validates the Ubuntu 24.04 environment.
 2. Installs Docker CE, Docker Compose plugin, and security tools.

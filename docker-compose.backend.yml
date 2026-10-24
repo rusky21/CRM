@@ -1,0 +1,107 @@
+version: '3.8'
+
+# ==============================================================================
+# StudioCRM: Server 2 (Backend, MTProto Pool, Redis, PostgreSQL, Alert Bot)
+# Optimized for 2GB RAM VPS with Memory Limits and Swap Safeguard
+# ==============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tg_crm_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-crm_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-studiocrm_db}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crm_admin} -d ${POSTGRES_DB:-studiocrm_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: tg_crm_redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru --appendonly yes --save 60 1
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.backend
+    container_name: tg_crm_backend
+    restart: unless-stopped
+    environment:
+      - SECRET_ENCRYPTION_KEY=${SECRET_ENCRYPTION_KEY}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-crm_admin}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-studiocrm_db}
+      - REDIS_URL=redis://redis:6379/0
+      - DEFAULT_TELEGRAM_API_ID=${DEFAULT_TELEGRAM_API_ID}
+      - DEFAULT_TELEGRAM_API_HASH=${DEFAULT_TELEGRAM_API_HASH}
+      - ADMIN_BOT_TOKEN=${ADMIN_BOT_TOKEN}
+      - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
+      - TMA_BOT_USERNAME=${TMA_BOT_USERNAME:-StudioCrmAdminBot}
+      - TMA_APP_SHORT_NAME=${TMA_APP_SHORT_NAME:-app}
+      - STUDIOCRM_SERVER_URL=${STUDIOCRM_SERVER_URL:-http://212.67.15.218:5000}
+      - FRONTEND_ORIGIN_DOMAIN=${FRONTEND_ORIGIN_DOMAIN:-*}
+    ports:
+      - "0.0.0.0:8000:8000"
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  bot:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.bot
+    container_name: tg_crm_admin_bot
+    restart: unless-stopped
+    environment:
+      - SECRET_ENCRYPTION_KEY=${SECRET_ENCRYPTION_KEY}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-crm_admin}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-studiocrm_db}
+      - REDIS_URL=redis://redis:6379/0
+      - ADMIN_BOT_TOKEN=${ADMIN_BOT_TOKEN}
+      - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
+      - TMA_BOT_USERNAME=${TMA_BOT_USERNAME:-StudioCrmAdminBot}
+      - TMA_APP_SHORT_NAME=${TMA_APP_SHORT_NAME:-app}
+      - STUDIOCRM_SERVER_URL=${STUDIOCRM_SERVER_URL:-http://212.67.15.218:5000}
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  redis_data:

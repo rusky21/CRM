@@ -89,10 +89,18 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS configuration for Telegram Mini App webview
+    # CORS configuration for Telegram Mini App and Server 1 Frontend
+    cors_origins = ["*"]
+    if settings.FRONTEND_ORIGIN_DOMAIN and settings.FRONTEND_ORIGIN_DOMAIN != "*":
+        for d in [item.strip() for item in settings.FRONTEND_ORIGIN_DOMAIN.split(",") if item.strip()]:
+            if not d.startswith("http://") and not d.startswith("https://"):
+                cors_origins.extend([f"https://{d}", f"http://{d}"])
+            else:
+                cors_origins.append(d)
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Allows Telegram Mobile & Desktop WebViews
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

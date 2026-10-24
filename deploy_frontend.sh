@@ -341,8 +341,13 @@ ln -sf "${NGINX_SITE}" /etc/nginx/sites-enabled/studiocrm-tma
 # Test Nginx configuration before reloading
 echo -e "${CYAN}--> Testing Nginx configuration integrity (nginx -t)...${NC}"
 if nginx -t; then
-    systemctl reload nginx
-    echo -e "${GREEN}[OK] Nginx successfully reloaded without affecting other sites.${NC}"
+    if systemctl is-active --quiet nginx; then
+        systemctl reload nginx
+        echo -e "${GREEN}[OK] Nginx successfully reloaded without affecting other sites.${NC}"
+    else
+        systemctl restart nginx || systemctl start nginx
+        echo -e "${GREEN}[OK] Nginx successfully started and running.${NC}"
+    fi
 else
     echo -e "${RED}[ERROR] Nginx syntax test failed. Removing link to prevent breaking existing sites.${NC}"
     rm -f /etc/nginx/sites-enabled/studiocrm-tma

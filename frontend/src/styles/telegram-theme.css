@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --tg-color-bg-list: #0e1621;
+  --tg-color-bg-chat: #0f141c;
+  --tg-color-bg-header: #17212b;
+  --tg-color-border: #232e3c;
+  --tg-color-incoming-bubble: #182533;
+  --tg-color-outgoing-bubble: #2b5278;
+  --tg-color-accent: #3390ec;
+  --tg-color-accent-hover: #4faeef;
+  --tg-color-text-primary: #ffffff;
+  --tg-color-text-secondary: #708499;
+  --tg-color-text-meta: #74a7d6;
+}
+
+/* Telegram Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Telegram Doodle Pattern Wallpaper */
+.telegram-doodle-bg {
+  background-color: var(--tg-color-bg-chat);
+  background-image: url("data:image/svg+xml,%3Csvg width='180' height='180' viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 30h10v10H30zm60 20l5 10h10l-8 6 3 10-10-7-10 7 3-10-8-6h10zm45-30c5 0 9 4 9 9s-4 9-9 9-9-4-9-9 4-9 9-9zm-95 85l12-8v16zm60 15h16v6h-16zm50-10a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm-115 45c0-6 5-11 11-11h10v22h-10c-6 0-11-5-11-11zm75 5h14v14h-14zm50-10l8 12h-16z' fill='%23ffffff' fill-opacity='0.04' fill-rule='evenodd'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+
+/* Telegram Bubble Tails */
+.bubble-tail-in {
+  position: absolute;
+  bottom: 0;
+  left: -7px;
+  width: 9px;
+  height: 16px;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 9 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M9 0c-4.97 0-9 4.03-9 9v7h9V0z' fill='%23182533'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+}
+
+.bubble-tail-out {
+  position: absolute;
+  bottom: 0;
+  right: -7px;
+  width: 9px;
+  height: 16px;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 9 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0c4.97 0 9 4.03 9 9v7H0V0z' fill='%232b5278'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+}
+
+/* Telegram 7 Official Avatar Gradients */
+.tg-avatar-0 { background: linear-gradient(135deg, #ff885e 0%, #ff516a 100%); }
+.tg-avatar-1 { background: linear-gradient(135deg, #ffcd6a 0%, #ffa85c 100%); }
+.tg-avatar-2 { background: linear-gradient(135deg, #82b1ff 0%, #6577f3 100%); }
+.tg-avatar-3 { background: linear-gradient(135deg, #53df83 0%, #30b06a 100%); }
+.tg-avatar-4 { background: linear-gradient(135deg, #53e2d0 0%, #29b4a4 100%); }
+.tg-avatar-5 { background: linear-gradient(135deg, #70c4ff 0%, #3598f4 100%); }
+.tg-avatar-6 { background: linear-gradient(135deg, #e572a6 0%, #c84680 100%); }

@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>StudioCRM TMA - Contacts Book, In-Chat Orders & 1:1 Telegram Web</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    :root {
+      --tg-color-bg-list: #0e1621;
+      --tg-color-bg-chat: #0f141c;
+      --tg-color-bg-header: #17212b;
+      --tg-color-border: #232e3c;
+      --tg-color-incoming-bubble: #182533;
+      --tg-color-outgoing-bubble: #2b5278;
+      --tg-color-accent: #3390ec;
+      --tg-color-accent-hover: #4faeef;
+    }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
+
+    .telegram-doodle-bg {
+      background-color: var(--tg-color-bg-chat);
+      background-image: url("data:image/svg+xml,%3Csvg width='180' height='180' viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 30h10v10H30zm60 20l5 10h10l-8 6 3 10-10-7-10 7 3-10-8-6h10zm45-30c5 0 9 4 9 9s-4 9-9 9-9-4-9-9 4-9 9-9zm-95 85l12-8v16zm60 15h16v6h-16zm50-10a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm-115 45c0-6 5-11 11-11h10v22h-10c-6 0-11-5-11-11zm75 5h14v14h-14zm50-10l8 12h-16z' fill='%23ffffff' fill-opacity='0.04' fill-rule='evenodd'/%3E%3C/svg%3E");
+      background-repeat: repeat;
+    }
+
+    .bubble-tail-in {
+      position: absolute;
+      bottom: 0;
+      left: -7px;
+      width: 9px;
+      height: 16px;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 9 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M9 0C8.5 7 4 12 0 16h9V0z' fill='%23182533'/%3E%3C/svg%3E");
+    }
+
+    .bubble-tail-out {
+      position: absolute;
+      bottom: 0;
+      right: -7px;
+      width: 9px;
+      height: 16px;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 9 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0C0.5 7 5 12 9 16H0V0z' fill='%232b5278'/%3E%3C/svg%3E");
+    }
+  </style>
+</head>
+<body class="bg-[#0e1621] text-white antialiased font-sans select-none overflow-hidden m-0 p-0">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const AVATAR_GRADIENTS = [
+      'from-red-500 to-orange-400',
+      'from-orange-500 to-amber-400',
+      'from-violet-600 to-purple-400',
+      'from-emerald-500 to-teal-400',
+      'from-cyan-500 to-blue-400',
+      'from-blue-600 to-indigo-400',
+      'from-pink-500 to-rose-400'
+    ];
+
+    const getAvatarClass = (id) => {
+      const num = typeof id === 'number' ? id : (id ? id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) : 0);
+      return `bg-gradient-to-tr ${AVATAR_GRADIENTS[Math.abs(num) % AVATAR_GRADIENTS.length]}`;
+    };
+
+    const getInitials = (name) => {
+      if (!name) return 'TG';
+      const parts = name.trim().split(/\s+/);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return name.slice(0, 2).toUpperCase();
+    };
+
+    // Accounts
+    const INITIAL_ACCOUNTS = [
+      { id: 'acc-1', title: 'Main Sales Session', custom_title: 'Менеджер Вася', phone: '+1 (202) 555-0199', status: 'ACTIVE', is_connected: true, total_unread_dialogues: 3, device_model: 'iPhone 15 Pro', proxy: 'SOCKS5 • 45ms', username: 'vasya_sales', first_name: 'Vasily', last_name: 'Manager', about: 'Official Sales Desk for Enterprise CRM' },
+      { id: 'acc-2', title: 'VIP Support Desk', custom_title: 'Техподдержка VIP', phone: '+7 (999) 123-45-67', status: 'ACTIVE', is_connected: true, total_unread_dialogues: 0, device_model: 'MacBook Pro M3', proxy: 'HTTP • 38ms', username: 'vip_support', first_name: 'Support', last_name: 'Lead', about: 'Priority SLA 24/7' },
+      { id: 'acc-3', title: 'Cold Outreach #4', custom_title: null, phone: '+44 7911 123456', status: 'CONNECTING', is_connected: false, total_unread_dialogues: 1, device_model: 'Galaxy S24 Ultra', proxy: 'SOCKS5 • Offline', username: 'outreach_bot', first_name: 'Cold', last_name: 'Outreach', about: 'B2B Leads Generation' },
+      { id: 'acc-4', title: 'Personal Backup', custom_title: 'Личный Архив', phone: '+7 (916) 456-78-90', status: 'ACTIVE', is_connected: true, total_unread_dialogues: 0, device_model: 'Windows 11 PC', proxy: 'Direct', username: 'alex_backup', first_name: 'Alexander', last_name: 'Volkov', about: 'Engineering Lead' },
+      { id: 'acc-5', title: 'Marketing Promo #2', custom_title: 'Архив: Промо-рассылка', phone: '+1 (555) 019-8833', status: 'BANNED', is_connected: false, total_unread_dialogues: 0, device_model: 'Pixel 8', proxy: 'SOCKS5 • Offline', username: 'promo_agency', first_name: 'Promo', last_name: 'Campaign', about: 'Deactivated Telegram Session' },
+    ];
+
+    // Real clients from StudioCRM system (port 5000 / studiocrm.db)
+    const INITIAL_STUDIOCRM_CLIENTS = [
+      {
+        id: 3,
+        name: 'Сеть клиник «Медикус»',
+        contactPerson: 'Дмитрий Соколов',
+        phone: '+7 (495) 789-01-23',
+        email: 'info@medicus-clinic.ru',
+        telegram: '@dmitry_medicus',
+        notes: 'Медицинская сеть. Требуется соответствие 152-ФЗ и интеграция с МИС.',
+        total_orders: 1,
+        total_revenue: 150000,
+        active_deal: { id: 5, orderNumber: 'ORD-2026-004', title: 'Интеграция 152-ФЗ', status: 'InProgress', totalCost: 150000 },
+        peer_id: 101,
+        last_message_at: '14:45'
+      },
+      {
+        id: 4,
+        name: 'Финтех «CryptoPay»',
+        contactPerson: 'Артем Новиков',
+        phone: '+7 (903) 321-65-43',
+        email: 'artem@cryptopay.global',
+        telegram: '@artem_fintech',
+        notes: 'Платежные решения, крипто-шлюзы, высокие требования к безопасности.',
+        total_orders: 1,
+        total_revenue: 100000,
+        active_deal: { id: 3, orderNumber: 'ORD-2026-НОВЫЙ', title: 'создание сайта', status: 'New', totalCost: 100000 },
+        peer_id: 104,
+        last_message_at: 'Oct 22'
+      },
+      {
+        id: 2,
+        name: 'Стартап «FoodDash»',
+        contactPerson: 'Елена Смирнова',
+        phone: '+7 (916) 456-78-90',
+        email: 'elena@fooddash.io',
+        telegram: '@elena_fooddash',
+        notes: 'Быстрорастущий стартап доставки еды. Нужны быстрые итерации.',
+        total_orders: 1,
+        total_revenue: 45000,
+        active_deal: { id: 2, orderNumber: 'ORD-2026-003', title: 'MVP Мобильное приложение', status: 'Completed', totalCost: 45000 },
+        peer_id: 102,
+        last_message_at: '13:10'
+      },
+      {
+        id: 1,
+        name: 'ООО «ТехноПром Инжиниринг»',
+        contactPerson: 'Александр Волков',
+        phone: '+7 (999) 123-45-67',
+        email: 'volkov@technoprom.ru',
+        telegram: '@volkov_tech',
+        notes: 'Крупный корпоративный заказчик, промышленное оборудование. Оплата строго по безналу.',
+        total_orders: 1,
+        total_revenue: 180000,
+        active_deal: { id: 1, orderNumber: 'ORD-2026-001', title: 'Портал Технопром', status: 'InProgress', totalCost: 180000 },
+        peer_id: 103,
+        last_message_at: 'Yesterday'
+      }
+    ];
+
+    const INITIAL_DIALOGUES = {
+      'acc-1': [
+        { id: 'd-1', peer_id: 101, peer_name: 'Dmitry Sokolov', peer_username: 'dmitry_medicus', unread_count: 2, last_message_text: 'Can we schedule a call regarding the 152-FZ compliance audit?', last_message_at: '14:45' },
+        { id: 'd-2', peer_id: 102, peer_name: 'Elena Smirnova', peer_username: 'elena_fooddash', unread_count: 1, last_message_text: 'MVP release build is approved! Need payment confirmation.', last_message_at: '13:10' },
+        { id: 'd-3', peer_id: 103, peer_name: 'Alexander Volkov', peer_username: 'volkov_tech', unread_count: 0, last_message_text: 'Thank you for the prompt technical consultation.', last_message_at: 'Yesterday' },
+      ],
+      'acc-2': [
+        { id: 'd-4', peer_id: 104, peer_name: 'Artem Novikov', peer_username: 'artem_fintech', unread_count: 0, last_message_text: 'Please review the updated webhook signatures.', last_message_at: 'Oct 22' },
+      ],
+      'acc-3': [
+        { id: 'd-5', peer_id: 105, peer_name: 'New Lead #882', peer_username: null, unread_count: 1, last_message_text: 'Hello, what is your minimum contract duration?', last_message_at: '11:20' }
+      ],
+      'acc-4': [],
+      'acc-5': [
+        { id: 'd-6', peer_id: 106, peer_name: 'Sergey Marketing Partner', peer_username: 'sergey_ad', unread_count: 0, last_message_text: 'The campaign contract is signed. Here are the materials.', last_message_at: 'Sep 15' }
+      ]
+    };
+
+    const INITIAL_MESSAGES = {
+      101: [
+        { id: 'm1', telegram_message_id: 1001, text: 'Good afternoon! We are reviewing the enterprise CRM specification.', is_outgoing: false, is_edited: false, created_at: '14:30', status: 'READ' },
+        { id: 'm2', telegram_message_id: 1002, text: 'Hello Dmitry! Yes, the architecture accommodates multi-account session isolation with individual SOCKS5 proxies.', is_outgoing: true, is_edited: false, created_at: '14:35', status: 'DELIVERED' },
+        { id: 'm3', telegram_message_id: 1003, text: 'Understood. What is the response latency under 50 simultaneous active accounts?', is_outgoing: false, is_edited: false, created_at: '14:40', status: 'READ' },
+        { id: 'm4', telegram_message_id: 1004, text: 'Sub-50ms via Redis stream consumer groups and pooled asyncio MTProto connections.', is_outgoing: true, is_edited: true, created_at: '14:42', status: 'DELIVERED' },
+        { id: 'm5', telegram_message_id: 1005, text: 'Can we schedule a call regarding the 152-FZ compliance audit?', is_outgoing: false, is_edited: false, created_at: '14:45', status: 'RECEIVED' },
+      ]
+    };
+
+    function App() {
+      const [view, setView] = useState('hub');
+      const [activeTab, setActiveTab] = useState('chats'); // 'chats' | 'clients'
+      const [accounts, setAccounts] = useState(INITIAL_ACCOUNTS);
+      const [activeAccount, setActiveAccount] = useState(INITIAL_ACCOUNTS[0]);
+      const [dialogues, setDialogues] = useState(INITIAL_DIALOGUES['acc-1']);
+      const [selectedDialogue, setSelectedDialogue] = useState(INITIAL_DIALOGUES['acc-1'][0]);
+      const [messages, setMessages] = useState(INITIAL_MESSAGES[101] || []);
+      const [searchQuery, setSearchQuery] = useState('');
+      const [hubSearch, setHubSearch] = useState('');
+      const [inputText, setInputText] = useState('');
+      const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+
+      // StudioCRM Clients Book & Orders
+      const [crmClients, setCrmClients] = useState(INITIAL_STUDIOCRM_CLIENTS);
+      const [clientFilter, setClientFilter] = useState('all'); // 'all' | '24h' | 'orders'
+      const [clientSearch, setClientSearch] = useState('');
+      const [isSyncing24h, setIsSyncing24h] = useState(false);
+      const [syncNotice, setSyncNotice] = useState(null);
+
+      // In-Chat Order Creation State
+      const [activeDeal, setActiveDeal] = useState({ id: 5, orderNumber: 'ORD-2026-004', title: 'Интеграция 152-ФЗ', status: 'InProgress', totalCost: 150000 });
+      const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+      const [orderTitle, setOrderTitle] = useState('Разработка Telegram CRM');
+      const [orderCost, setOrderCost] = useState('75000');
+      const [orderDeadline, setOrderDeadline] = useState('2026-11-20');
+      const [orderStatus, setOrderStatus] = useState('New');
+      const [orderNotes, setOrderNotes] = useState('Создано прямо из чата Telegram Mini App в StudioCRM');
+      const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+
+      // SPRINT 2.3: Bot FSM /new_client Simulation State
+      const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
+      const [newClientName, setNewClientName] = useState('');
+      const [newClientContact, setNewClientContact] = useState('');
+      const [newClientPerson, setNewClientPerson] = useState('');
+      const [newClientNotes, setNewClientNotes] = useState('');
+      const [newClientOrder, setNewClientOrder] = useState('75000 Разработка Telegram-бота');
+      const [isSubmittingNewClient, setIsSubmittingNewClient] = useState(false);
+
+      const scrollRef = useRef(null);
+
+      // Open account from hub
+      const handleOpenAccountFromHub = (acc) => {
+        setActiveAccount(acc);
+        const accDialogues = INITIAL_DIALOGUES[acc.id] || [];
+        setDialogues(accDialogues);
+        if (accDialogues.length > 0) {
+          setSelectedDialogue(accDialogues[0]);
+          setMessages(INITIAL_MESSAGES[accDialogues[0].peer_id] || []);
+        } else {
+          setSelectedDialogue(null);
+          setMessages([]);
+        }
+        setView('client');
+      };
+
+      // Open chat directly from Clients Contact Book
+      const handleOpenClientChat = (client) => {
+        const usernameClean = (client.telegram || '').replace('@', '').toLowerCase();
+        let match = dialogues.find(d => (d.peer_username && d.peer_username.toLowerCase() === usernameClean) || d.peer_id === client.peer_id);
+        
+        if (!match) {
+          match = {
+            id: `d-crm-${client.id}`,
+            peer_id: client.peer_id || (client.id * 100),
+            peer_name: client.contactPerson || client.name,
+            peer_username: usernameClean,
+            unread_count: 0,
+            last_message_text: `StudioCRM: ${client.name}`,
+            last_message_at: 'Just now'
+          };
+          setDialogues(prev => [match, ...prev]);
+        }
+        setSelectedDialogue(match);
+        setMessages(INITIAL_MESSAGES[match.peer_id] || [
+          { id: 'm-init', telegram_message_id: 888, text: `Client thread linked to StudioCRM: ${client.name}`, is_outgoing: false, is_edited: false, created_at: 'Today', status: 'READ' }
+        ]);
+        setActiveDeal(client.active_deal || null);
+        setActiveTab('chats');
+      };
+
+      // Trigger 24h lead sync
+      const handleSyncLeads24h = () => {
+        setIsSyncing24h(true);
+        setTimeout(() => {
+          setIsSyncing24h(false);
+          setSyncNotice('✓ Успешно: 3 новых лида из Telegram синхронизированы в StudioCRM!');
+          setTimeout(() => setSyncNotice(null), 4000);
+        }, 1000);
+      };
+
+      // Create Order in StudioCRM
+      const handleCreateOrderSubmit = (e) => {
+        e.preventDefault();
+        setIsSubmittingOrder(true);
+        setTimeout(() => {
+          const newOrderNumber = `ORD-2026-${Math.floor(100 + Math.random() * 900)}`;
+          const created = {
+            id: Date.now(),
+            orderNumber: newOrderNumber,
+            title: orderTitle.trim(),
+            status: orderStatus,
+            totalCost: parseFloat(orderCost) || 0,
+            deadline: orderDeadline,
+            notes: orderNotes
+          };
+          setActiveDeal(created);
+
+          // Update client in list if exists
+          setCrmClients(prev => prev.map(c => {
+            if (selectedDialogue && (c.peer_id === selectedDialogue.peer_id || (c.telegram && c.telegram.includes(selectedDialogue.peer_username)))) {
+              return {
+                ...c,
+                total_orders: c.total_orders + 1,
+                total_revenue: c.total_revenue + created.totalCost,
+                active_deal: created
+              };
+            }
+            return c;
+          }));
+
+          setIsSubmittingOrder(false);
+          setIsOrderModalOpen(false);
+          alert(`✅ Заказ ${newOrderNumber} на ${created.totalCost.toLocaleString('ru-RU')} ₽ успешно создан в существующей StudioCRM!`);
+        }, 800);
+      };
+
+      const handleNewClientSubmit = (e) => {
+        e.preventDefault();
+        setIsSubmittingNewClient(true);
+        setTimeout(() => {
+          const rawContact = newClientContact.trim();
+          let tg = rawContact.startsWith('@') ? rawContact : (rawContact.includes('@') ? '@' + rawContact.split('@')[1] : null);
+          let phone = rawContact.replace(/[^\d+]/g, '');
+          if (phone.length < 7) phone = '+7 (999) 000-00-00';
+          if (!tg) tg = '@' + newClientName.toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 15);
+
+          let orderObj = null;
+          let orderNum = null;
+          const orderInput = newClientOrder.trim();
+          if (orderInput && orderInput.toLowerCase() !== '/skip') {
+            const match = orderInput.match(/^([\d\s]+(?:[.,]\d+)?)\s*(?:₽|руб|rub|usd|\$)?\s*(.*)$/i);
+            let amount = 0;
+            let title = 'Новая сделка';
+            if (match) {
+              amount = parseFloat(match[1].replace(/\s+/g, '').replace(',', '.')) || 0;
+              title = match[2].trim() || 'Новая сделка';
+            }
+            orderNum = `ORD-2026-${Math.floor(100 + Math.random() * 900)}`;
+            orderObj = {
+              id: Date.now() + 1,
+              orderNumber: orderNum,
+              title: title,
+              status: 'New',
+              totalCost: amount
+            };
+          }
+
+          const newClientObj = {
+            id: Date.now(),
+            name: newClientName.trim(),
+            contactPerson: newClientPerson.trim() || newClientName.trim(),
+            phone: phone,
+            telegram: tg,
+            notes: newClientNotes.trim() || 'Зарегистрирован через Bot /new_client FSM',
+            total_orders: orderObj ? 1 : 0,
+            total_revenue: orderObj ? orderObj.totalCost : 0,
+            active_deal: orderObj
+          };
+
+          setCrmClients(prev => [newClientObj, ...prev]);
+          setIsSubmittingNewClient(false);
+          setIsNewClientModalOpen(false);
+          setNewClientName('');
+          setNewClientContact('');
+          setNewClientPerson('');
+          setNewClientNotes('');
+          setNewClientOrder('');
+          setSyncNotice(`✅ Клиент «${newClientObj.name}» ${orderNum ? `со сделкой ${orderNum}` : ''} успешно добавлен в StudioCRM!`);
+          setTimeout(() => setSyncNotice(null), 5000);
+        }, 600);
+      };
+
+      const handleSend = () => {
+        if (activeAccount.status === 'BANNED' || !inputText.trim()) return;
+        const newMsg = {
+          id: 'm-' + Date.now(),
+          telegram_message_id: Math.floor(Math.random() * 90000) + 1000,
+          text: inputText.trim(),
+          is_outgoing: true,
+          is_edited: false,
+          created_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          status: 'DELIVERED',
+        };
+        setMessages(prev => [...prev, newMsg]);
+        setInputText('');
+      };
+
+      // Filtered StudioCRM clients
+      const filteredCrmClients = crmClients.filter(c => {
+        const q = clientSearch.toLowerCase();
+        const matchText = c.name.toLowerCase().includes(q) || (c.contactPerson && c.contactPerson.toLowerCase().includes(q)) || (c.telegram && c.telegram.toLowerCase().includes(q)) || (c.phone && c.phone.includes(q));
+        if (!matchText) return false;
+        if (clientFilter === 'orders' && c.total_orders === 0) return false;
+        return true;
+      });
+
+      // --- SCREEN A: DEDICATED ACCOUNT HUB ---
+      if (view === 'hub') {
+        return (
+          <div className="flex flex-col h-screen w-screen bg-[#0e1621] text-white overflow-hidden select-none">
+            <div className="px-5 pt-6 pb-4 bg-[#17212b] border-b border-[#232e3c] flex flex-col gap-4 z-10 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <h1 className="text-xl font-bold tracking-tight">My Telegram Accounts</h1>
+                  <span className="bg-[#202b36] border border-[#232e3c] text-[#708499] text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                    {accounts.length}
+                  </span>
+                </div>
+              </div>
+
+              <div className="relative">
+                <input 
+                  type="text"
+                  placeholder="Filter accounts by alias, phone or proxy..."
+                  value={hubSearch}
+                  onChange={(e) => setHubSearch(e.target.value)}
+                  className="w-full bg-[#0e1621] text-sm text-white placeholder-[#708499] rounded-xl pl-9 pr-4 py-2 border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
+                />
+                <svg className="w-4 h-4 text-[#708499] absolute left-3 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3">
+              {accounts.map(acc => {
+                const isBanned = acc.status === 'BANNED';
+                const displayTitle = acc.custom_title || acc.title;
+                return (
+                  <div 
+                    key={acc.id}
+                    onClick={() => handleOpenAccountFromHub(acc)}
+                    className="flex items-center justify-between p-4 rounded-2xl bg-[#17212b]/80 border border-[#232e3c] hover:bg-[#17212b] hover:border-[#3390ec] transition-all cursor-pointer group shadow"
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-white shadow ${getAvatarClass(acc.id)}`}>
+                        {getInitials(displayTitle)}
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-bold text-base text-white truncate group-hover:text-[#4faeef]">{displayTitle}</span>
+                        <span className="text-xs text-[#708499]">{acc.phone} • {acc.proxy}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1.5 bg-[#202b36] group-hover:bg-[#3390ec] text-white text-xs font-semibold rounded-xl">Open</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      }
+
+      // --- SCREEN B: 1:1 CLIENT WITH CHATS & CLIENTS TAB SWITCHER ---
+      const isBannedAccount = activeAccount.status === 'BANNED';
+
+      return (
+        <div className="flex h-screen w-screen overflow-hidden bg-[#0e1621] text-white select-none">
+          {/* Left Column: Switcher & Content */}
+          <div className="w-full md:w-[370px] h-full flex flex-col border-r border-[#232e3c] flex-shrink-0 z-20">
+            {/* Top Bar with All Accounts Return & Active Account */}
+            <div className="h-14 bg-[#17212b] border-b border-[#232e3c] flex items-center justify-between px-3 gap-2 flex-shrink-0">
+              <button 
+                onClick={() => setView('hub')}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-[#202b36] hover:bg-[#2b5278] text-[#4faeef] hover:text-white rounded-lg text-xs font-semibold transition-colors flex-shrink-0"
+              >
+                <span>← All Accounts</span>
+              </button>
+
+              <div 
+                onClick={() => setIsAccountMenuOpen(!isAccountMenuOpen)}
+                className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-[#202b36] cursor-pointer max-w-[190px]"
+              >
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[10px] text-white ${getAvatarClass(activeAccount.id)}`}>
+                  {getInitials(activeAccount.custom_title || activeAccount.title)}
+                </div>
+                <span className="text-xs font-bold truncate text-white">{activeAccount.custom_title || activeAccount.title}</span>
+              </div>
+            </div>
+
+            {/* SPRINT 2.2: NAVIGATION TAB SWITCHER (💬 Чаты <-> 👥 Клиенты StudioCRM) */}
+            <div className="flex items-center p-1.5 bg-[#0e1621] border-b border-[#232e3c] gap-1 flex-shrink-0">
+              <button
+                onClick={() => setActiveTab('chats')}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+                  activeTab === 'chats'
+                    ? 'bg-[#3390ec] text-white shadow'
+                    : 'text-[#708499] hover:text-white'
+                }`}
+              >
+                <span>💬 Чаты Telegram</span>
+                {dialogues.reduce((s, d) => s + d.unread_count, 0) > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                    {dialogues.reduce((s, d) => s + d.unread_count, 0)}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => setActiveTab('clients')}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+                  activeTab === 'clients'
+                    ? 'bg-[#3390ec] text-white shadow'
+                    : 'text-[#708499] hover:text-white'
+                }`}
+              >
+                <span>👥 Клиенты StudioCRM</span>
+                <span className="bg-[#202b36] text-[#708499] text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                  {crmClients.length}
+                </span>
+              </button>
+            </div>
+
+            {/* Content Pane: Dialogue List OR Clients Directory */}
+            {activeTab === 'chats' ? (
+              <div className="flex-1 overflow-y-auto">
+                <div className="p-3 bg-[#0e1621] border-b border-[#232e3c]">
+                  <input 
+                    type="text" 
+                    placeholder="Search chats..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-[#17212b] text-white placeholder-[#708499] text-xs rounded-xl px-3 py-2 border border-[#232e3c] focus:outline-none focus:border-[#3390ec]"
+                  />
+                </div>
+                {dialogues.map(d => {
+                  const isSelected = selectedDialogue && selectedDialogue.id === d.id;
+                  return (
+                    <div 
+                      key={d.id}
+                      onClick={() => {
+                        setSelectedDialogue(d);
+                        setMessages(INITIAL_MESSAGES[d.peer_id] || []);
+                        const matchClient = crmClients.find(c => c.peer_id === d.peer_id || (c.telegram && c.telegram.includes(d.peer_username)));
+                        setActiveDeal(matchClient ? matchClient.active_deal : null);
+                      }}
+                      className={`flex items-center gap-3 p-3 cursor-pointer border-b border-[#17212b] transition-colors ${
+                        isSelected ? 'bg-[#2b5278]' : 'hover:bg-[#17212b]'
+                      }`}
+                    >
+                      <div className={`w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm text-white flex-shrink-0 shadow ${getAvatarClass(d.peer_id)}`}>
+                        {getInitials(d.peer_name)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-sm font-semibold truncate text-white">{d.peer_name}</span>
+                          <span className="text-[11px] text-[#708499]">{d.last_message_at}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-[#708499] truncate">{d.last_message_text}</span>
+                          {d.unread_count > 0 && (
+                            <span className="bg-[#3390ec] text-white text-[11px] font-bold px-1.5 py-0.5 rounded-full ml-1">
+                              {d.unread_count}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              /* SPRINT 2.2: CLIENTS DIRECTORY (CONTACTS BOOK) */
+              <div className="flex-1 flex flex-col overflow-hidden bg-[#0e1621]">
+                <div className="p-3 bg-[#17212b] border-b border-[#232e3c] space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white">Центральная база CRM</span>
+                    <div className="flex items-center gap-1.5">
+                      <button 
+                        onClick={() => setIsNewClientModalOpen(true)}
+                        className="px-2.5 py-1 bg-[#3390ec] hover:bg-[#4faeef] text-white rounded-lg text-[11px] font-semibold transition-colors shadow flex items-center gap-1"
+                      >
+                        <span>➕ /new_client</span>
+                      </button>
+                      <button 
+                        onClick={handleSyncLeads24h}
+                        disabled={isSyncing24h}
+                        className="px-2.5 py-1 bg-[#202b36] hover:bg-[#3390ec] text-[#4faeef] hover:text-white rounded-lg text-[11px] font-semibold transition-colors border border-[#232e3c]"
+                      >
+                        {isSyncing24h ? 'Синхронизация...' : '⚡ Синхр. 24ч'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <input 
+                    type="text" 
+                    placeholder="Поиск по компании, имени, телефону..."
+                    value={clientSearch}
+                    onChange={(e) => setClientSearch(e.target.value)}
+                    className="w-full bg-[#0e1621] text-white placeholder-[#708499] text-xs rounded-xl px-3 py-2 border border-[#232e3c] focus:outline-none focus:border-[#3390ec]"
+                  />
+
+                  <div className="flex items-center gap-1.5">
+                    <button 
+                      onClick={() => setClientFilter('all')}
+                      className={`px-2 py-0.5 text-[11px] rounded-lg font-medium ${clientFilter === 'all' ? 'bg-[#3390ec] text-white' : 'text-[#708499] bg-[#0e1621] border border-[#232e3c]'}`}
+                    >
+                      Все
+                    </button>
+                    <button 
+                      onClick={() => setClientFilter('orders')}
+                      className={`px-2 py-0.5 text-[11px] rounded-lg font-medium ${clientFilter === 'orders' ? 'bg-[#3390ec] text-white' : 'text-[#708499] bg-[#0e1621] border border-[#232e3c]'}`}
+                    >
+                      💼 С заказами
+                    </button>
+                  </div>
+
+                  {syncNotice && (
+                    <div className="p-2 bg-[#53df83]/15 border border-[#53df83]/30 rounded-lg text-[11px] text-[#53df83]">
+                      {syncNotice}
+                    </div>
+                  )}
+                </div>
+
+                {/* Clients Rows */}
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                  {filteredCrmClients.map(c => (
+                    <div 
+                      key={c.id}
+                      onClick={() => handleOpenClientChat(c)}
+                      className="p-3 bg-[#17212b]/80 border border-[#232e3c] hover:border-[#3390ec] rounded-xl cursor-pointer transition-all group"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs text-white shadow ${getAvatarClass(c.id)}`}>
+                          {getInitials(c.name)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="font-bold text-xs text-white truncate block group-hover:text-[#4faeef]">{c.name}</span>
+                          <span className="text-[11px] text-[#708499] truncate block">{c.contactPerson} • {c.phone}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#232e3c]/50 text-[10px]">
+                        <span className="text-[#4faeef] font-semibold bg-[#0e1621] px-1.5 py-0.5 rounded border border-[#232e3c]">
+                          {c.telegram}
+                        </span>
+                        {c.total_orders > 0 ? (
+                          <span className="text-[#53df83] font-bold">
+                            💼 {c.total_orders} зак. • {c.total_revenue.toLocaleString('ru-RU')} ₽
+                          </span>
+                        ) : (
+                          <span className="text-[#708499]">Без заказов</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right Column: Chat View with In-Chat Order Creation */}
+          <div className="flex-1 h-full flex flex-col relative bg-[#0f141c] telegram-doodle-bg">
+            {selectedDialogue ? (
+              <>
+                {/* Chat Header with SPRINT 2.2 ORDER BUTTON / ACTIVE DEAL BADGE */}
+                <div className="h-14 bg-[#17212b] border-b border-[#232e3c] flex items-center justify-between px-4 z-20 flex-shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm text-white shadow ${getAvatarClass(selectedDialogue.peer_id)}`}>
+                      {getInitials(selectedDialogue.peer_name)}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold text-white">{selectedDialogue.peer_name}</span>
+                      <span className="text-xs text-[#708499]">{selectedDialogue.peer_username ? `@${selectedDialogue.peer_username}` : 'online'}</span>
+                    </div>
+                  </div>
+
+                  {/* SPRINT 2.2: In-Chat Order Trigger or Active Deal Status Pill */}
+                  <div className="flex items-center gap-2">
+                    {activeDeal ? (
+                      <button 
+                        onClick={() => setIsOrderModalOpen(true)}
+                        className="flex items-center gap-1.5 px-3 py-1 bg-[#53df83]/15 hover:bg-[#53df83]/25 border border-[#53df83]/40 text-[#53df83] text-xs font-semibold rounded-xl transition-all shadow"
+                        title="Заказ привязан к существующей StudioCRM"
+                      >
+                        <span>💼 {activeDeal.orderNumber}: {Number(activeDeal.totalCost).toLocaleString('ru-RU')} ₽ ({activeDeal.status})</span>
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={() => setIsOrderModalOpen(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-[#202b36] hover:bg-[#3390ec] text-[#4faeef] hover:text-white border border-[#232e3c] text-xs font-semibold rounded-xl transition-all shadow"
+                      >
+                        <span>💼 Создать заказ</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Messages Body */}
+                <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2.5">
+                  {messages.map(m => (
+                    <div key={m.id} className={`flex ${m.is_outgoing ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`relative max-w-[75%] rounded-2xl p-2.5 shadow-sm text-sm ${m.is_outgoing ? 'bg-[#2b5278] text-white' : 'bg-[#182533] text-white'}`}>
+                        {m.is_outgoing ? <div className="bubble-tail-out"></div> : <div className="bubble-tail-in"></div>}
+                        <div className="pr-12">{m.text}</div>
+                        <div className="absolute right-2 bottom-1 flex items-center gap-1 text-[10px] text-[#708499]">
+                          <span>{m.created_at}</span>
+                          {m.is_outgoing && <span className="text-[#4faeef] font-bold">✓✓</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Bottom Bar: Input Bar */}
+                {isBannedAccount ? (
+                  <div className="p-4 bg-[#17212b] border-t border-[#232e3c] flex items-center justify-center gap-2 text-xs text-[#ff596a] font-medium">
+                    <span>🔒 Этот аккаунт заблокирован в Telegram. Доступен режим архива.</span>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-[#17212b] border-t border-[#232e3c] flex items-center gap-2">
+                    <input 
+                      type="text"
+                      placeholder="Write a message..."
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
+                      className="flex-1 bg-[#0e1621] text-white placeholder-[#708499] text-sm py-2 px-3.5 rounded-xl border border-[#232e3c] focus:outline-none focus:border-[#3390ec]"
+                    />
+                    <button onClick={handleSend} className="px-4 py-2 bg-[#3390ec] hover:bg-[#4faeef] text-white text-xs font-semibold rounded-xl shadow">
+                      Send
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center text-[#708499]">
+                <div className="w-16 h-16 rounded-full bg-[#17212b] flex items-center justify-center mb-3">💬</div>
+                <span className="text-sm font-semibold text-white">Выберите чат или клиента для общения</span>
+              </div>
+            )}
+
+            {/* SPRINT 2.3: BOT /new_client FSM SIMULATION MODAL */}
+            {isNewClientModalOpen && (
+              <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-[#17212b] border border-[#232e3c] rounded-2xl p-5 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between pb-3 border-b border-[#232e3c]">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[#3390ec]">👤</span>
+                      <h3 className="text-base font-bold text-white">Регистрация клиента (/new_client)</h3>
+                    </div>
+                    <button onClick={() => setIsNewClientModalOpen(false)} className="text-[#708499] hover:text-white">✕</button>
+                  </div>
+
+                  <form onSubmit={handleNewClientSubmit} className="mt-4 space-y-3.5">
+                    <div>
+                      <label className="text-xs text-[#708499] block mb-1">Шаг 1: Компания / Имя клиента *</label>
+                      <input 
+                        type="text" 
+                        required 
+                        placeholder="Например: ООО «ТехноПром» или Иван Петров"
+                        value={newClientName} 
+                        onChange={(e) => setNewClientName(e.target.value)} 
+                        className="w-full bg-[#0e1621] text-sm text-white px-3.5 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-[#708499] block mb-1">Шаг 2: Telegram (@username) или Телефон *</label>
+                      <input 
+                        type="text" 
+                        required 
+                        placeholder="@client_ceo или +7 (999) 123-45-67"
+                        value={newClientContact} 
+                        onChange={(e) => setNewClientContact(e.target.value)} 
+                        className="w-full bg-[#0e1621] text-sm text-white px-3.5 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-[#708499] block mb-1">Шаг 3: Контактное лицо (ФИО / должность)</label>
+                      <input 
+                        type="text" 
+                        placeholder="Иванов Алексей (или оставьте пустым)"
+                        value={newClientPerson} 
+                        onChange={(e) => setNewClientPerson(e.target.value)} 
+                        className="w-full bg-[#0e1621] text-sm text-white px-3.5 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-[#708499] block mb-1">Шаг 4: Заметки / комментарий к клиенту</label>
+                      <textarea 
+                        rows={2} 
+                        placeholder="Ключевые требования, договоренности..."
+                        value={newClientNotes} 
+                        onChange={(e) => setNewClientNotes(e.target.value)} 
+                        className="w-full bg-[#0e1621] text-sm text-white px-3.5 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none resize-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-[#708499] block mb-1">Шаг 5: Сделка (сумма и название или /skip)</label>
+                      <input 
+                        type="text" 
+                        placeholder="75000 Разработка Telegram-бота (или /skip)"
+                        value={newClientOrder} 
+                        onChange={(e) => setNewClientOrder(e.target.value)} 
+                        className="w-full bg-[#0e1621] text-sm text-white px-3.5 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2">
+                      <button type="button" onClick={() => setIsNewClientModalOpen(false)} className="px-4 py-2 text-xs font-semibold text-[#708499] hover:text-white">Отмена</button>
+                      <button 
+                        type="submit" 
+                        disabled={isSubmittingNewClient} 
+                        className="px-5 py-2 text-xs font-semibold bg-[#3390ec] hover:bg-[#4faeef] text-white rounded-xl shadow transition-all active:scale-95"
+                      >
+                        {isSubmittingNewClient ? 'Запись в CRM...' : 'Сохранить в StudioCRM'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+            {isOrderModalOpen && (
+              <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-[#17212b] border border-[#232e3c] rounded-2xl p-5 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between pb-3 border-b border-[#232e3c]">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[#3390ec]">💼</span>
+                      <h3 className="text-base font-bold text-white">Создать заказ в StudioCRM</h3>
+                    </div>
+                    <button onClick={() => setIsOrderModalOpen(false)} className="text-[#708499] hover:text-white">✕</button>
+                  </div>
+
+                  <form onSubmit={handleCreateOrderSubmit} className="mt-4 space-y-3.5">
+                    <div>
+                      <label className="text-xs text-[#708499] block mb-1">Привязка к клиенту</label>
+                      <div className="p-2.5 bg-[#0e1621] rounded-xl border border-[#232e3c] text-xs text-white flex justify-between">
+                        <span className="font-semibold">{selectedDialogue.peer_name}</span>
+                        <span className="text-[#4faeef]">@{selectedDialogue.peer_username || selectedDialogue.peer_id}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-[#708499] block mb-1">Название проекта / заказа *</label>
+                      <input 
+                        type="text" 
+                        required 
+                        value={orderTitle} 
+                        onChange={(e) => setOrderTitle(e.target.value)} 
+                        className="w-full bg-[#0e1621] text-sm text-white px-3.5 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-[#708499] block mb-1">Сумма сделки (₽) *</label>
+                        <input 
+                          type="number" 
+                          required 
+                          value={orderCost} 
+                          onChange={(e) => setOrderCost(e.target.value)} 
+                          className="w-full bg-[#0e1621] text-sm text-white px-3.5 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-[#708499] block mb-1">Статус</label>
+                        <select 
+                          value={orderStatus} 
+                          onChange={(e) => setOrderStatus(e.target.value)} 
+                          className="w-full bg-[#0e1621] text-sm text-white px-3 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
+                        >
+                          <option value="New">Новый (New)</option>
+                          <option value="InProgress">В работе (InProgress)</option>
+                          <option value="Completed">Выполнен (Completed)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-[#708499] block mb-1">Дедлайн сдачи</label>
+                      <input 
+                        type="date" 
+                        value={orderDeadline} 
+                        onChange={(e) => setOrderDeadline(e.target.value)} 
+                        className="w-full bg-[#0e1621] text-sm text-white px-3.5 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-[#708499] block mb-1">Заметки</label>
+                      <textarea 
+                        rows={2} 
+                        value={orderNotes} 
+                        onChange={(e) => setOrderNotes(e.target.value)} 
+                        className="w-full bg-[#0e1621] text-sm text-white px-3.5 py-2 rounded-xl border border-[#232e3c] focus:border-[#3390ec] focus:outline-none resize-none"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2">
+                      <button type="button" onClick={() => setIsOrderModalOpen(false)} className="px-4 py-2 text-xs font-semibold text-[#708499] hover:text-white">Отмена</button>
+                      <button 
+                        type="submit" 
+                        disabled={isSubmittingOrder} 
+                        className="px-5 py-2 text-xs font-semibold bg-[#3390ec] hover:bg-[#4faeef] text-white rounded-xl shadow transition-all active:scale-95"
+                      >
+                        {isSubmittingOrder ? 'Отправка...' : 'Создать в StudioCRM'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

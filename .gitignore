@@ -1,0 +1,60 @@
+# =========================================================================
+# StudioCRM Security & Repository .gitignore
+# =========================================================================
+
+# Environment and secrets (CRITICAL: Never commit credentials)
+.env
+*.env
+backend/.env
+!.env.example
+!backend/.env.example
+
+# Telegram MTProto session files & databases
+*.session
+*.session-journal
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+studiocrm.db
+studiocrm-*-backup.db
+
+# Media cache & dynamic runtime uploads
+media_cache/
+uploads/
+*.log
+
+# Binary executables and debug symbol artifacts
+*.exe
+*.dll
+*.pdb
+
+# Frontend build & dependencies
+node_modules/
+dist/
+build/
+.npm/
+
+# Python cache & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Editor and OS system files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini

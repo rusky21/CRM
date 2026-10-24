@@ -236,6 +236,7 @@
       const [show2FAPassword, setShow2FAPassword] = useState(false);
       const [sessionToken, setSessionToken] = useState(null);
       const [phoneCodeHash, setPhoneCodeHash] = useState(null);
+      const [deliveryHint, setDeliveryHint] = useState('');
       const [authError, setAuthError] = useState(null);
       const [isSubmittingAccount, setIsSubmittingAccount] = useState(false);
       const [qrScanned, setQrScanned] = useState(false);
@@ -485,6 +486,7 @@
           if (res.ok) {
             setSessionToken(data.session_token);
             setPhoneCodeHash(data.phone_code_hash);
+            setDeliveryHint(data.delivery_hint || '');
             setAddAccountStep(2);
           } else {
             setAuthError(data.detail || 'Не удалось отправить проверочный код. Проверьте правильность номера телефона.');
@@ -882,7 +884,12 @@
                         <form onSubmit={handleVerifyCodeSubmit} className="space-y-3.5">
                           <div className="p-3 bg-[#0e1621] rounded-xl border border-[#3390ec]/30 text-xs">
                             <span className="text-[#4faeef] font-semibold block mb-0.5">📨 Проверочный код отправлен!</span>
-                            <span className="text-[#708499]">Telegram выслал 5-значный код в официальное приложение на номер <strong>{addAccountPhone}</strong> (сообщение от аккаунта Telegram 777000) или по SMS.</span>
+                            <span className="text-white font-medium block my-1">
+                              {deliveryHint || 'Код отправлен в официальное приложение Telegram (в чат со служебным профилем Telegram, а НЕ в SMS)!'}
+                            </span>
+                            <span className="text-[#708499] text-[11px] block">
+                              Откройте Telegram на телефоне или компьютере: вверху списка чатов должно появиться сообщение с кодом входа от официального аккаунта Telegram (ID 777000).
+                            </span>
                           </div>
 
                           <div>

@@ -221,11 +221,21 @@ async def send_telegram_auth_code(
         "created_at": time.time(),
     }
 
+    code_type_name = type(sent_code.type).__name__ if hasattr(sent_code, "type") else "App"
+    if "Sms" in code_type_name:
+        delivery_hint = "по SMS на ваш телефон"
+    elif "Call" in code_type_name:
+        delivery_hint = "через телефонный звонок"
+    else:
+        delivery_hint = "в официальное приложение Telegram (в чат со служебным аккаунтом «Telegram» с синей галочкой, а НЕ по SMS)"
+
     return {
         "status": "code_sent",
         "session_token": session_token,
         "phone": clean_phone,
-        "message": f"Verification code sent to Telegram app on {clean_phone}",
+        "code_type": code_type_name,
+        "delivery_hint": delivery_hint,
+        "message": f"Код отправлен {delivery_hint}.",
     }
 
 

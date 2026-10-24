@@ -44,8 +44,9 @@ def build_admin_alert(
     )
 
     # Mini App direct deep link: https://t.me/<bot>/<app>?startapp=chat_<account_id>_<peer_id>
+    clean_bot = (bot_username or settings.TMA_BOT_USERNAME or "StudioCrmBot").lstrip("@")
     deep_link_url = (
-        f"https://t.me/{bot_username}/{app_short_name}?startapp=chat_{account_id}_{peer_id}"
+        f"https://t.me/{clean_bot}/{app_short_name}?startapp=chat_{account_id}_{peer_id}"
     )
 
     keyboard = InlineKeyboardMarkup(
@@ -76,8 +77,9 @@ async def handle_start(message: Message) -> None:
         f"• /cancel — Сброс любого активного ввода"
     )
 
-    mini_app_url = f"https://t.me/{settings.TMA_BOT_USERNAME}/{settings.TMA_APP_SHORT_NAME}"
-    clients_app_url = f"https://t.me/{settings.TMA_BOT_USERNAME}/{settings.TMA_APP_SHORT_NAME}?startapp=tab_clients"
+    clean_bot = (settings.TMA_BOT_USERNAME or "StudioCrmBot").lstrip("@")
+    mini_app_url = f"https://t.me/{clean_bot}/{settings.TMA_APP_SHORT_NAME}"
+    clients_app_url = f"https://t.me/{clean_bot}/{settings.TMA_APP_SHORT_NAME}?startapp=tab_clients"
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[

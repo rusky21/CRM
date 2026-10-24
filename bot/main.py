@@ -101,9 +101,19 @@ async def start_bot() -> None:
     # Spawn background alert listener
     alert_task = asyncio.create_task(listen_admin_alerts(bot, redis_client))
 
+    # Clear any active webhook to prevent TelegramConflictError during long-polling
+    try:
+        await bot.delete_webhook(drop_pending_updates=True)
+        logger.info("Cleared previous webhook (if any) and reset pending updates.")
+    except Exception as exc:
+        logger.warning(f"Could not reset webhook: {exc}")
+
     logger.info("Admin Alert Bot starting long-polling...")
     try:
         await dp.start_polling(bot)
+    except Exception as exc:
+        logger.error(f"Fatal error during bot polling: {exc}", exc_info=True)
+        raise
     finally:
         alert_task.cancel()
         await alert_task

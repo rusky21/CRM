@@ -27,7 +27,7 @@ from backend.app.models.proxy import Proxy
 from backend.app.models.dialogue import Dialogue
 from backend.app.services.mtproto.pool_manager import MTProtoPoolManager
 from backend.app.services.mtproto.fingerprint import generate_random_fingerprint
-from backend.app.core.telegram_auth import get_current_tma_user
+from backend.app.core.telegram_auth import get_current_tma_user, get_optional_tma_user
 
 router = APIRouter(prefix="/accounts", tags=["Accounts"])
 
@@ -68,7 +68,7 @@ class ProfileUpdateRequest(BaseModel):
 @router.get("", response_model=List[Dict[str, Any]])
 async def list_accounts(
     db: AsyncSession = Depends(get_db),
-    user_auth: Dict[str, Any] = Depends(get_current_tma_user),
+    user_auth: Optional[Dict[str, Any]] = Depends(get_optional_tma_user),
 ) -> List[Dict[str, Any]]:
     """
     Returns all managed Telegram accounts with their live MTProto connection status
@@ -156,7 +156,7 @@ async def reconnect_account(
 async def send_telegram_auth_code(
     payload: SendCodeRequest,
     db: AsyncSession = Depends(get_db),
-    user_auth: Dict[str, Any] = Depends(get_current_tma_user),
+    user_auth: Optional[Dict[str, Any]] = Depends(get_optional_tma_user),
 ) -> Dict[str, Any]:
     """
     Step 1 of Telegram Phone Auth:
@@ -233,7 +233,7 @@ async def send_telegram_auth_code(
 async def verify_telegram_auth_code(
     payload: VerifyCodeRequest,
     db: AsyncSession = Depends(get_db),
-    user_auth: Dict[str, Any] = Depends(get_current_tma_user),
+    user_auth: Optional[Dict[str, Any]] = Depends(get_optional_tma_user),
 ) -> Dict[str, Any]:
     """
     Step 2 of Telegram Phone Auth:
@@ -375,7 +375,7 @@ async def verify_telegram_auth_code(
 async def verify_telegram_2fa_password(
     payload: Verify2FARequest,
     db: AsyncSession = Depends(get_db),
-    user_auth: Dict[str, Any] = Depends(get_current_tma_user),
+    user_auth: Optional[Dict[str, Any]] = Depends(get_optional_tma_user),
 ) -> Dict[str, Any]:
     """
     Step 3 of Telegram Phone Auth:
@@ -502,7 +502,7 @@ async def import_session_file(
     custom_title: Optional[str] = Form(None),
     proxy_id: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
-    user_auth: Dict[str, Any] = Depends(get_current_tma_user),
+    user_auth: Optional[Dict[str, Any]] = Depends(get_optional_tma_user),
 ) -> Dict[str, Any]:
     """
     Imports an account directly via a Telethon .session binary file or .txt StringSession file.

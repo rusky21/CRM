@@ -464,7 +464,7 @@
       const handleRequestPhoneCode = async (e) => {
         if (e) e.preventDefault();
         setAuthError(null);
-        const cleanPhone = addAccountPhone.trim().replace(/\s+/g, '');
+        const cleanPhone = addAccountPhone.trim().replace(/[\s()-]/g, '');
         if (cleanPhone.length < 8) {
           setAuthError('Укажите корректный номер телефона с кодом страны (например: +7 999 123-45-67)');
           return;
@@ -472,9 +472,13 @@
 
         setIsSubmittingAccount(true);
         try {
+          const headers = { 'Content-Type': 'application/json' };
+          if (window.Telegram?.WebApp?.initData) {
+            headers['X-Telegram-Init-Data'] = window.Telegram.WebApp.initData;
+          }
           const res = await fetch('/api/v1/accounts/auth/send-code', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: headers,
             body: JSON.stringify({ phone: cleanPhone })
           });
           const data = await res.json();
@@ -483,12 +487,10 @@
             setPhoneCodeHash(data.phone_code_hash);
             setAddAccountStep(2);
           } else {
-            console.warn('Backend send-code error, activating fallback code step:', data);
-            setAddAccountStep(2);
+            setAuthError(data.detail || 'Не удалось отправить проверочный код. Проверьте правильность номера телефона.');
           }
         } catch (err) {
-          console.warn('Backend offline, opening interactive code step:', err);
-          setAddAccountStep(2);
+          setAuthError(`Ошибка связи с сервером MTProto: ${err.message}`);
         } finally {
           setIsSubmittingAccount(false);
         }
@@ -498,7 +500,7 @@
       const handleVerifyCodeSubmit = async (e) => {
         if (e) e.preventDefault();
         setAuthError(null);
-        const cleanCode = addAccountCode.trim().replace(/\s+/g, '');
+        const cleanCode = addAccountCode.trim().replace(/[\s-]/g, '');
         if (cleanCode.length < 4) {
           setAuthError('Введите 5-значный проверочный код из приложения Telegram');
           return;
@@ -507,9 +509,13 @@
         setIsSubmittingAccount(true);
         try {
           if (sessionToken) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (window.Telegram?.WebApp?.initData) {
+              headers['X-Telegram-Init-Data'] = window.Telegram.WebApp.initData;
+            }
             const res = await fetch('/api/v1/accounts/auth/verify-code', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: headers,
               body: JSON.stringify({
                 session_token: sessionToken,
                 code: cleanCode,
@@ -532,24 +538,13 @@
             }
           }
 
-          // Demo fallback
-          if (cleanCode === '22222') {
-            setAddAccountStep(3);
-            setIsSubmittingAccount(false);
-            return;
-          }
-
           finishAccountRegistration({
             phone: addAccountPhone,
             title: addAccountTitle || `Telegram (${addAccountPhone})`,
             custom_title: addAccountTitle || null
           });
         } catch (err) {
-          finishAccountRegistration({
-            phone: addAccountPhone,
-            title: addAccountTitle || `Telegram (${addAccountPhone})`,
-            custom_title: addAccountTitle || null
-          });
+          setAuthError(`Ошибка проверки кода: ${err.message}`);
         } finally {
           setIsSubmittingAccount(false);
         }

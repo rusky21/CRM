@@ -137,3 +137,24 @@ async def get_current_tma_user(
         init_data_raw=init_data,
         bot_token=settings.ADMIN_BOT_TOKEN,
     )
+
+
+async def get_optional_tma_user(
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    init_data_query: Optional[str] = Query(None, alias="initData"),
+) -> Optional[Dict[str, Any]]:
+    """
+    Permissive FastAPI dependency that extracts and validates TMA user if initData is supplied,
+    but does not raise 401 if missing (allowing public/internal auth actions).
+    """
+    init_data = x_telegram_init_data or init_data_query
+    if not init_data or not settings.ADMIN_BOT_TOKEN:
+        return None
+
+    try:
+        return parse_and_validate_telegram_init_data(
+            init_data_raw=init_data,
+            bot_token=settings.ADMIN_BOT_TOKEN,
+        )
+    except Exception:
+        return None

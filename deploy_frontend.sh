@@ -108,6 +108,14 @@ while [ -z "${FRONTEND_DOMAIN}" ]; do
     prompt_var "  Please enter domain or IP" "${DETECTED_SERVER1_IP}" FRONTEND_DOMAIN
 done
 
+# Port Configuration
+DEFAULT_HTTP_PORT="80"
+if ss -tulpn 2>/dev/null | grep -q ':80 '; then
+    echo -e "${YELLOW}[INFO] Port 80 is already occupied by another service on this server.${NC}"
+    DEFAULT_HTTP_PORT="8080"
+fi
+prompt_var "• HTTP Port for StudioCRM" "${DEFAULT_HTTP_PORT}" FRONTEND_PORT
+
 # Server 2 Backend Connection
 echo -e "\n${CYAN}--- 2. Server 2 Backend Connection ---${NC}"
 prompt_var "• Server 2 Backend API URL (e.g. http://<SERVER2_IP>:8000 or https://api.domain.com)" "http://${DETECTED_SERVER1_IP}:8000" BACKEND_API_URL
@@ -230,8 +238,8 @@ if [ "${SSL_MODE_CHOICE}" = "1" ] && [ -n "${SSL_CERT_PATH}" ] && [ -n "${SSL_KE
 # ==============================================================================
 
 server {
-    listen 80;
-    listen [::]:80;
+    listen ${FRONTEND_PORT};
+    listen [::]:${FRONTEND_PORT};
     server_name ${FRONTEND_DOMAIN};
 
     # Redirect HTTP to HTTPS
@@ -287,8 +295,8 @@ elif [ "${SSL_MODE_CHOICE}" = "3" ]; then
     # Certbot Managed Setup
     cat > "${NGINX_SITE}" <<EOF
 server {
-    listen 80;
-    listen [::]:80;
+    listen ${FRONTEND_PORT};
+    listen [::]:${FRONTEND_PORT};
     server_name ${FRONTEND_DOMAIN};
 
     root ${WEB_ROOT};
@@ -312,8 +320,8 @@ else
     # HTTP Only / External SSL Offloading
     cat > "${NGINX_SITE}" <<EOF
 server {
-    listen 80;
-    listen [::]:80;
+    listen ${FRONTEND_PORT};
+    listen [::]:${FRONTEND_PORT};
     server_name ${FRONTEND_DOMAIN};
 
     root ${WEB_ROOT};
@@ -333,6 +341,11 @@ server {
 }
 EOF
     FINAL_PROTOCOL="http"
+fi
+
+# Disable default welcome page if custom port is used so it doesn't conflict with port 80
+if [ "${FRONTEND_PORT}" != "80" ] && [ -f /etc/nginx/sites-enabled/default ]; then
+    rm -f /etc/nginx/sites-enabled/default
 fi
 
 # Enable ONLY the StudioCRM site without touching existing sites
@@ -361,14 +374,24 @@ if [ "${SSL_MODE_CHOICE}" = "3" ]; then
         echo -e "${GREEN}[OK] Certbot SSL configured!${NC}"
         FINAL_PROTOCOL="https"
     else
-        echo -e "${YELLOW}[WARNING] Certbot failed. Operating over HTTP on port 80.${NC}"
+        echo -e "${YELLOW}[WARNING] Certbot failed. Operating over HTTP on port ${FRONTEND_PORT}.${NC}"
     fi
 fi
 
-# Firewall: Ensure standard web ports are open
+# Firewall: Ensure standard and custom web ports are open
 ufw allow 22/tcp comment 'SSH' > /dev/null 2>&1 || true
 ufw allow 80/tcp comment 'HTTP' > /dev/null 2>&1 || true
 ufw allow 443/tcp comment 'HTTPS' > /dev/null 2>&1 || true
+if [ "${FRONTEND_PORT}" != "80" ] && [ "${FRONTEND_PORT}" != "443" ]; then
+    ufw allow "${FRONTEND_PORT}/tcp" comment 'StudioCRM TMA' > /dev/null 2>&1 || true
+fi
+
+PORT_SUFFIX=""
+if [ "${FRONTEND_PORT}" != "80" ] && [ "${FRONTEND_PORT}" != "443" ]; then
+    PORT_SUFFIX=":${FRONTEND_PORT}"
+fi
+
+FINAL_URL="${FINAL_PROTOCOL}://${FRONTEND_DOMAIN}${PORT_SUFFIX}/preview.html"
 
 # ------------------------------------------------------------------------------
 # FINAL SUMMARY & BOTFATHER INSTRUCTIONS
@@ -378,7 +401,7 @@ echo "          🎉 StudioCRM Frontend Deployed Successfully (Multi-Site Active
 echo "================================================================================${NC}"
 
 echo -e "\n${BOLD}Telegram Mini App Access:${NC}"
-echo -e "   • Public Mini App URL:   ${BOLD}${CYAN}${FINAL_PROTOCOL}://${FRONTEND_DOMAIN}/preview.html${NC}"
+echo -e "   • Public Mini App URL:   ${BOLD}${CYAN}${FINAL_URL}${NC}"
 echo -e "   • Backend Routed Target: ${CYAN}${BACKEND_API_URL}${NC}"
 echo -e "   • Web Root Directory:    ${CYAN}${WEB_ROOT}${NC}"
 
@@ -392,7 +415,7 @@ echo -e "\n${BOLD}📱 Instructions for @BotFather:${NC}"
 echo -e "   1. Open ${CYAN}https://t.me/BotFather${NC} in Telegram"
 echo -e "   2. Send ${BOLD}/newapp${NC} and select your bot"
 echo -e "   3. When prompted for Web App URL, paste:"
-echo -e "      ${BOLD}${CYAN}${FINAL_PROTOCOL}://${FRONTEND_DOMAIN}/preview.html${NC}"
+echo -e "      ${BOLD}${CYAN}${FINAL_URL}${NC}"
 echo -e "   4. Set short name: ${BOLD}app${NC}"
 
 echo -e "\n${GREEN}Deployment complete at $(date -u +"%Y-%m-%d %H:%M:%SZ").${NC}\n"

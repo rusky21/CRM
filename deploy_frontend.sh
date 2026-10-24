@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # StudioCRM: Server 1 (Frontend & Telegram Mini App Web Hosting)
-# Automated Deployment Script for Ubuntu 24.04 LTS (Nginx + Certbot SSL)
+# Automated Deployment Script for Ubuntu 24.04 LTS (Nginx Multi-Site & Custom SSL)
 # ==============================================================================
 
 set -euo pipefail
@@ -19,15 +19,15 @@ clear || true
 
 echo -e "${CYAN}${BOLD}"
 echo "================================================================================"
-echo "    StudioCRM: Server 1 Deployment Wizard (Mini App Web Hosting & Nginx)       "
-echo "                      Ubuntu 24.04 LTS • SSL & Let's Encrypt                    "
+echo "    StudioCRM: Server 1 Frontend Deployment (Multi-Site & Custom SSL)          "
+echo "                      Ubuntu 24.04 LTS • Non-Destructive                        "
 echo "================================================================================"
 echo -e "${NC}"
 
 # ------------------------------------------------------------------------------
 # STEP 1: PRIVILEGE & OS VERIFICATION
 # ------------------------------------------------------------------------------
-echo -e "${BLUE}[1/5] Verifying root privileges and OS version...${NC}"
+echo -e "${BLUE}[1/5] Verifying environment and existing Nginx sites...${NC}"
 
 if [ "${EUID}" -ne 0 ]; then
     echo -e "${RED}[ERROR] This deployment script must be run as root or with sudo.${NC}"
@@ -39,16 +39,26 @@ if [ -f /etc/os-release ]; then
     # shellcheck disable=SC1091
     source /etc/os-release
     if [[ "${ID}" != "ubuntu" ]] || [[ "${VERSION_ID}" != "24.04" ]]; then
-        echo -e "${YELLOW}[WARNING] System is ${PRETTY_NAME:-unknown}. Optimized for Ubuntu 24.04 LTS.${NC}"
+        echo -e "${YELLOW}[WARNING] System is ${PRETTY_NAME:-unknown}. Script is tested for Ubuntu 24.04 LTS.${NC}"
     else
         echo -e "${GREEN}[OK] Operating System confirmed: ${PRETTY_NAME}${NC}"
     fi
 fi
 
+# Detect existing sites in Nginx to ensure 100% non-destructive coexistence
+if [ -d "/etc/nginx/sites-enabled" ]; then
+    EXISTING_SITES=$(ls -1 /etc/nginx/sites-enabled/ 2>/dev/null || true)
+    if [ -n "${EXISTING_SITES}" ]; then
+        echo -e "${YELLOW}[INFO] Detected existing hosted sites in Nginx:${NC}"
+        echo -e "${CYAN}${EXISTING_SITES}${NC}"
+        echo -e "${GREEN}--> StudioCRM will be installed alongside your existing sites without touching them!${NC}"
+    fi
+fi
+
 # ------------------------------------------------------------------------------
-# STEP 2: INSTALL NGINX, CERTBOT & CORE UTILITIES
+# STEP 2: INSTALL CORE DEPENDENCIES (WITHOUT BREAKING RUNNING SITES)
 # ------------------------------------------------------------------------------
-echo -e "\n${BLUE}[2/5] Installing Nginx, Certbot and networking tools...${NC}"
+echo -e "\n${BLUE}[2/5] Checking and installing Nginx utilities...${NC}"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
@@ -56,19 +66,17 @@ apt-get install -y --no-install-recommends \
     curl \
     git \
     nginx \
-    certbot \
-    python3-certbot-nginx \
     ufw \
     ca-certificates \
     sed
 
 systemctl enable nginx
-echo -e "${GREEN}[OK] Nginx and Certbot installed.${NC}"
+echo -e "${GREEN}[OK] Nginx is ready.${NC}"
 
 # ------------------------------------------------------------------------------
-# STEP 3: INTERACTIVE DOMAIN & BACKEND API WIZARD
+# STEP 3: INTERACTIVE DOMAIN, BACKEND & SSL WIZARD
 # ------------------------------------------------------------------------------
-echo -e "\n${BLUE}[3/5] Interactive Frontend Configuration...${NC}"
+echo -e "\n${BLUE}[3/5] Interactive Configuration (Multi-Site & SSL)...${NC}"
 
 prompt_var() {
     local prompt="$1"
@@ -91,34 +99,73 @@ prompt_var() {
 
 DETECTED_SERVER1_IP=$(curl -s -4 ifconfig.me || curl -s -4 api.ipify.org || echo "127.0.0.1")
 
-echo -e "${CYAN}--- Server 1 Domain Configuration ---${NC}"
-prompt_var "• Domain name for Mini App (e.g. crm.myagency.com or public IP)" "${DETECTED_SERVER1_IP}" FRONTEND_DOMAIN
+# Domain Configuration
+echo -e "${CYAN}--- 1. Domain Configuration ---${NC}"
+echo -e "Enter the specific domain or subdomain for StudioCRM Mini App (e.g. ${BOLD}crm.domain.com${NC} or ${BOLD}domain.com${NC}):"
+prompt_var "• Domain for Mini App" "${DETECTED_SERVER1_IP}" FRONTEND_DOMAIN
 while [ -z "${FRONTEND_DOMAIN}" ]; do
     echo -e "${RED}[!] Domain or IP is required.${NC}"
     prompt_var "  Please enter domain or IP" "${DETECTED_SERVER1_IP}" FRONTEND_DOMAIN
 done
 
-echo -e "\n${CYAN}--- Server 2 Backend Connection ---${NC}"
-prompt_var "• Server 2 Backend API URL (e.g. http://1.2.3.4:8000 or https://api.myagency.com)" "http://${DETECTED_SERVER1_IP}:8000" BACKEND_API_URL
+# Server 2 Backend Connection
+echo -e "\n${CYAN}--- 2. Server 2 Backend Connection ---${NC}"
+prompt_var "• Server 2 Backend API URL (e.g. http://<SERVER2_IP>:8000 or https://api.domain.com)" "http://${DETECTED_SERVER1_IP}:8000" BACKEND_API_URL
 while [ -z "${BACKEND_API_URL}" ]; do
-    echo -e "${RED}[!] Backend API URL is required to route Telegram requests.${NC}"
+    echo -e "${RED}[!] Backend API URL is required.${NC}"
     prompt_var "  Please enter Server 2 URL" "http://${DETECTED_SERVER1_IP}:8000" BACKEND_API_URL
 done
-
-# Strip trailing slashes
 BACKEND_API_URL="${BACKEND_API_URL%/}"
 
-prompt_var "• Email for Let's Encrypt SSL notifications" "admin@${FRONTEND_DOMAIN}" CERTBOT_EMAIL
+# SSL Certificate Mode
+echo -e "\n${CYAN}--- 3. SSL / HTTPS Certificate Mode ---${NC}"
+echo -e "Choose how SSL certificates are managed for this domain:"
+echo -e "  ${BOLD}1${NC}) Use existing / custom SSL certificate files (fullchain.pem & privkey.pem)"
+echo -e "  ${BOLD}2${NC}) HTTP only (Port 80) — behind Cloudflare Flexible SSL, Traefik, or reverse proxy"
+echo -e "  ${BOLD}3${NC}) Issue a new Let's Encrypt certificate via Certbot for this domain"
+
+read -r -p "$(echo -e "${BOLD}Select option [1/2/3] (default: 1): ${NC}") " SSL_MODE_CHOICE
+SSL_MODE_CHOICE="${SSL_MODE_CHOICE:-1}"
+
+SSL_CERT_PATH=""
+SSL_KEY_PATH=""
+
+if [ "${SSL_MODE_CHOICE}" = "1" ]; then
+    echo -e "\n${CYAN}Provide paths to your existing SSL certificate files:${NC}"
+    # Check default common locations
+    DEFAULT_CERT="/etc/letsencrypt/live/${FRONTEND_DOMAIN}/fullchain.pem"
+    DEFAULT_KEY="/etc/letsencrypt/live/${FRONTEND_DOMAIN}/privkey.pem"
+    if [ ! -f "${DEFAULT_CERT}" ]; then
+        DEFAULT_CERT="/etc/ssl/certs/${FRONTEND_DOMAIN}.crt"
+        DEFAULT_KEY="/etc/ssl/private/${FRONTEND_DOMAIN}.key"
+    fi
+
+    prompt_var "• Path to SSL Certificate (fullchain.pem / cert.crt)" "${DEFAULT_CERT}" SSL_CERT_PATH
+    prompt_var "• Path to SSL Private Key (privkey.pem / cert.key)" "${DEFAULT_KEY}" SSL_KEY_PATH
+
+    if [ ! -f "${SSL_CERT_PATH}" ] || [ ! -f "${SSL_KEY_PATH}" ]; then
+        echo -e "${YELLOW}[WARNING] One or both certificate files were not found on disk right now.${NC}"
+        echo -e "Paths specified: ${SSL_CERT_PATH} and ${SSL_KEY_PATH}"
+        read -r -p "Proceed with these paths anyway? [Y/n]: " proceed_cert
+        if [[ "${proceed_cert}" =~ ^[Nn]$ ]]; then
+            echo -e "${YELLOW}Falling back to HTTP (port 80). You can add SSL paths in /etc/nginx/sites-available/studiocrm-tma later.${NC}"
+            SSL_MODE_CHOICE="2"
+        fi
+    fi
+elif [ "${SSL_MODE_CHOICE}" = "3" ]; then
+    apt-get install -y --no-install-recommends certbot python3-certbot-nginx
+    prompt_var "• Email for Let's Encrypt notifications" "admin@${FRONTEND_DOMAIN}" CERTBOT_EMAIL
+fi
 
 # ------------------------------------------------------------------------------
-# STEP 4: DEPLOY WEB ASSETS & PATCH PREVIEW.HTML
+# STEP 4: DEPLOY ISOLATED WEB ASSETS & PATCH PREVIEW.HTML
 # ------------------------------------------------------------------------------
-echo -e "\n${BLUE}[4/5] Deploying Web App files and configuring Nginx reverse proxy...${NC}"
+echo -e "\n${BLUE}[4/5] Deploying Web App files to isolated directory...${NC}"
 
-WEB_ROOT="/var/www/telegram-crm"
+# Use dedicated directory that NEVER conflicts with other sites in /var/www/
+WEB_ROOT="/var/www/studiocrm-tma"
 mkdir -p "${WEB_ROOT}"
 
-# Copy frontend source files
 if [ -d "frontend" ]; then
     cp -r frontend/* "${WEB_ROOT}/" 2>/dev/null || true
     if [ -f "frontend/preview.html" ]; then
@@ -126,12 +173,11 @@ if [ -d "frontend" ]; then
     fi
 else
     echo -e "${RED}[ERROR] Directory 'frontend' not found in current folder ($(pwd)).${NC}"
-    echo -e "Please run this script from the project root repository directory."
     exit 1
 fi
 
-# Ensure preview.html is patched with Backend Bridge injection
-echo -e "${CYAN}--> Injecting Server 2 Backend Bridge configuration into Web App...${NC}"
+# Inject Backend API URL into preview.html and index.html
+echo -e "${CYAN}--> Injecting Server 2 Backend URL (${BACKEND_API_URL}) into Web App...${NC}"
 INJECTION="<script>window.__STUDIOCRM_BACKEND_URL__='${BACKEND_API_URL}';</script>"
 sed -i "s|<head>|<head>\n  ${INJECTION}|g" "${WEB_ROOT}/preview.html" 2>/dev/null || true
 sed -i "s|<head>|<head>\n  ${INJECTION}|g" "${WEB_ROOT}/index.html" 2>/dev/null || true
@@ -139,18 +185,74 @@ sed -i "s|<head>|<head>\n  ${INJECTION}|g" "${WEB_ROOT}/index.html" 2>/dev/null 
 chown -R www-data:www-data "${WEB_ROOT}"
 chmod -R 755 "${WEB_ROOT}"
 
-# Configure Nginx Site Block
-NGINX_CONF="/etc/nginx/sites-available/telegram-crm"
+# ------------------------------------------------------------------------------
+# STEP 5: GENERATE DEDICATED NGINX CONFIG & REVERSE PROXY
+# ------------------------------------------------------------------------------
+echo -e "\n${BLUE}[5/5] Generating Nginx Virtual Host and location snippets...${NC}"
 
-cat > "${NGINX_CONF}" <<EOF
+# Also generate a reusable location snippet for inclusion into existing server blocks
+SNIPPET_DIR="/etc/nginx/snippets"
+mkdir -p "${SNIPPET_DIR}"
+SNIPPET_CONF="${SNIPPET_DIR}/studiocrm.conf"
+
+cat > "${SNIPPET_CONF}" <<EOF
 # ==============================================================================
-# StudioCRM: Server 1 Frontend & TMA Web Server Configuration
+# StudioCRM Reusable Location Snippet (Include in any existing server block)
+# Example: include /etc/nginx/snippets/studiocrm.conf;
+# ==============================================================================
+
+# Reverse Proxy for StudioCRM Backend REST & WebSocket Gateway
+location /api/ {
+    proxy_pass ${BACKEND_API_URL}/api/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_read_timeout 86400s;
+    proxy_send_timeout 86400s;
+    proxy_buffering off;
+}
+EOF
+echo -e "${GREEN}[OK] Location snippet created at ${SNIPPET_CONF}.${NC}"
+
+# Create dedicated virtual host configuration
+NGINX_SITE="/etc/nginx/sites-available/studiocrm-tma"
+
+if [ "${SSL_MODE_CHOICE}" = "1" ] && [ -n "${SSL_CERT_PATH}" ] && [ -n "${SSL_KEY_PATH}" ]; then
+    # Full HTTPS Server Block with Custom SSL
+    cat > "${NGINX_SITE}" <<EOF
+# ==============================================================================
+# StudioCRM: Dedicated Virtual Host with Custom SSL
+# Coexists cleanly with other sites in /etc/nginx/sites-available/
 # ==============================================================================
 
 server {
     listen 80;
     listen [::]:80;
     server_name ${FRONTEND_DOMAIN};
+
+    # Redirect HTTP to HTTPS
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name ${FRONTEND_DOMAIN};
+
+    # Custom SSL Certificates
+    ssl_certificate ${SSL_CERT_PATH};
+    ssl_certificate_key ${SSL_KEY_PATH};
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
 
     root ${WEB_ROOT};
     index preview.html index.html;
@@ -162,97 +264,130 @@ server {
     gzip_proxied any;
     gzip_types text/plain text/css text/xml application/json application/javascript application/xml+rss application/atom+xml image/svg+xml;
 
-    # Telegram Mini App Security Headers (ALLOW IFRAME EMBEDDING IN TELEGRAM CLIENTS)
+    # Telegram Mini App Security Headers (Frame embedding allowed for Telegram)
     add_header Content-Security-Policy "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: http: data: blob: wss: ws:; frame-ancestors *;" always;
     add_header Access-Control-Allow-Origin "*" always;
 
-    # Static Web App files
     location / {
         try_files \$uri \$uri/ /preview.html;
     }
 
-    # Static Assets Cache
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 30d;
         add_header Cache-Control "public, no-transform";
     }
 
-    # Secure Reverse Proxy to Server 2 (Backend REST & WebSocket Gateway)
-    # Eliminates Mixed-Content and Cross-Origin blocking inside Telegram WebViews
-    location /api/ {
-        proxy_pass ${BACKEND_API_URL}/api/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_read_timeout 86400s;
-        proxy_send_timeout 86400s;
-        proxy_buffering off;
-    }
+    # Include backend reverse proxy snippet
+    include ${SNIPPET_CONF};
 }
 EOF
+    FINAL_PROTOCOL="https"
 
-# Enable Site and Disable Default
-ln -sf "${NGINX_CONF}" /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
+elif [ "${SSL_MODE_CHOICE}" = "3" ]; then
+    # Certbot Managed Setup
+    cat > "${NGINX_SITE}" <<EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${FRONTEND_DOMAIN};
 
-# Test and reload Nginx
-nginx -t
-systemctl reload nginx
-echo -e "${GREEN}[OK] Nginx site configured and active.${NC}"
+    root ${WEB_ROOT};
+    index preview.html index.html;
 
-# Configure UFW Firewall
-ufw allow 22/tcp comment 'SSH Access' > /dev/null
-ufw allow 80/tcp comment 'HTTP Web / TMA' > /dev/null
-ufw allow 443/tcp comment 'HTTPS Web / TMA' > /dev/null
-echo "y" | ufw enable > /dev/null || true
+    gzip on;
+    gzip_types text/plain text/css text/xml application/json application/javascript image/svg+xml;
 
-# ------------------------------------------------------------------------------
-# STEP 5: SSL CERTIFICATE ISSUANCE (CERTBOT)
-# ------------------------------------------------------------------------------
-echo -e "\n${BLUE}[5/5] Configuring SSL Certificate with Let's Encrypt...${NC}"
+    add_header Content-Security-Policy "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: http: data: blob: wss: ws:; frame-ancestors *;" always;
+    add_header Access-Control-Allow-Origin "*" always;
 
-IS_IP=false
-if [[ "${FRONTEND_DOMAIN}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    IS_IP=true
-fi
+    location / {
+        try_files \$uri \$uri/ /preview.html;
+    }
 
-if [ "${IS_IP}" = "false" ]; then
-    echo -e "${CYAN}--> Requesting SSL certificate for domain: ${FRONTEND_DOMAIN}...${NC}"
-    if certbot --nginx -d "${FRONTEND_DOMAIN}" --non-interactive --agree-tos -m "${CERTBOT_EMAIL}" --redirect; then
-        echo -e "${GREEN}[OK] HTTPS / SSL Certificate successfully issued and configured!${NC}"
-        FINAL_PROTOCOL="https"
-    else
-        echo -e "${YELLOW}[WARNING] Let's Encrypt issuance failed. Ensure DNS A-record points to ${DETECTED_SERVER1_IP}.${NC}"
-        echo -e "You can retry later using: ${BOLD}certbot --nginx -d ${FRONTEND_DOMAIN}${NC}"
-        FINAL_PROTOCOL="http"
-    fi
+    include ${SNIPPET_CONF};
+}
+EOF
+    FINAL_PROTOCOL="http"
 else
-    echo -e "${YELLOW}[INFO] IP address detected (${FRONTEND_DOMAIN}). Let's Encrypt requires a domain name.${NC}"
-    echo -e "Serving Mini App over HTTP on port 80."
+    # HTTP Only / External SSL Offloading
+    cat > "${NGINX_SITE}" <<EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${FRONTEND_DOMAIN};
+
+    root ${WEB_ROOT};
+    index preview.html index.html;
+
+    gzip on;
+    gzip_types text/plain text/css text/xml application/json application/javascript image/svg+xml;
+
+    add_header Content-Security-Policy "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: http: data: blob: wss: ws:; frame-ancestors *;" always;
+    add_header Access-Control-Allow-Origin "*" always;
+
+    location / {
+        try_files \$uri \$uri/ /preview.html;
+    }
+
+    include ${SNIPPET_CONF};
+}
+EOF
     FINAL_PROTOCOL="http"
 fi
+
+# Enable ONLY the StudioCRM site without touching existing sites
+ln -sf "${NGINX_SITE}" /etc/nginx/sites-enabled/studiocrm-tma
+
+# Test Nginx configuration before reloading
+echo -e "${CYAN}--> Testing Nginx configuration integrity (nginx -t)...${NC}"
+if nginx -t; then
+    systemctl reload nginx
+    echo -e "${GREEN}[OK] Nginx successfully reloaded without affecting other sites.${NC}"
+else
+    echo -e "${RED}[ERROR] Nginx syntax test failed. Removing link to prevent breaking existing sites.${NC}"
+    rm -f /etc/nginx/sites-enabled/studiocrm-tma
+    exit 1
+fi
+
+# If Certbot was chosen, obtain certificate now
+if [ "${SSL_MODE_CHOICE}" = "3" ]; then
+    echo -e "${CYAN}--> Running Certbot for ${FRONTEND_DOMAIN}...${NC}"
+    if certbot --nginx -d "${FRONTEND_DOMAIN}" --non-interactive --agree-tos -m "${CERTBOT_EMAIL}" --redirect; then
+        echo -e "${GREEN}[OK] Certbot SSL configured!${NC}"
+        FINAL_PROTOCOL="https"
+    else
+        echo -e "${YELLOW}[WARNING] Certbot failed. Operating over HTTP on port 80.${NC}"
+    fi
+fi
+
+# Firewall: Ensure standard web ports are open
+ufw allow 22/tcp comment 'SSH' > /dev/null 2>&1 || true
+ufw allow 80/tcp comment 'HTTP' > /dev/null 2>&1 || true
+ufw allow 443/tcp comment 'HTTPS' > /dev/null 2>&1 || true
 
 # ------------------------------------------------------------------------------
 # FINAL SUMMARY & BOTFATHER INSTRUCTIONS
 # ------------------------------------------------------------------------------
 echo -e "\n${GREEN}${BOLD}================================================================================"
-echo "          🎉 Server 1 (Frontend & TMA Web App) Deployed Successfully!           "
+echo "          🎉 StudioCRM Frontend Deployed Successfully (Multi-Site Active)       "
 echo "================================================================================${NC}"
 
 echo -e "\n${BOLD}Telegram Mini App Access:${NC}"
-echo -e "   • Web App Direct URL:    ${CYAN}${FINAL_PROTOCOL}://${FRONTEND_DOMAIN}/preview.html${NC}"
+echo -e "   • Public Mini App URL:   ${BOLD}${CYAN}${FINAL_PROTOCOL}://${FRONTEND_DOMAIN}/preview.html${NC}"
 echo -e "   • Backend Routed Target: ${CYAN}${BACKEND_API_URL}${NC}"
+echo -e "   • Web Root Directory:    ${CYAN}${WEB_ROOT}${NC}"
 
-echo -e "\n${BOLD}📱 Instructions for @BotFather Configuration:${NC}"
+echo -e "\n${BOLD}💡 Note for Multi-Site Servers:${NC}"
+echo -e "   • All existing Nginx sites were preserved untouched in ${CYAN}/etc/nginx/sites-enabled/${NC}."
+echo -e "   • StudioCRM configuration is located at ${CYAN}${NGINX_SITE}${NC}."
+echo -e "   • If you wish to route /api/ inside an existing domain instead of a subdomain,"
+echo -e "     simply add: ${BOLD}include ${SNIPPET_CONF};${NC} into your existing server block."
+
+echo -e "\n${BOLD}📱 Instructions for @BotFather:${NC}"
 echo -e "   1. Open ${CYAN}https://t.me/BotFather${NC} in Telegram"
 echo -e "   2. Send ${BOLD}/newapp${NC} and select your bot"
 echo -e "   3. When prompted for Web App URL, paste:"
 echo -e "      ${BOLD}${CYAN}${FINAL_PROTOCOL}://${FRONTEND_DOMAIN}/preview.html${NC}"
 echo -e "   4. Set short name: ${BOLD}app${NC}"
-echo -e "   5. Your direct Telegram launch link is ready!"
 
-echo -e "\n${GREEN}Deployment finished at $(date -u +"%Y-%m-%d %H:%M:%SZ").${NC}\n"
+echo -e "\n${GREEN}Deployment complete at $(date -u +"%Y-%m-%d %H:%M:%SZ").${NC}\n"

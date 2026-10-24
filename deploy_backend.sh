@@ -177,11 +177,20 @@ echo -e "\n${CYAN}--- 3. StudioCRM & Server 1 CORS Configuration ---${NC}"
 prompt_var "• Existing StudioCRM Backend URL" "http://212.67.15.218:5000" CRM_SERVER_URL
 prompt_var "• Server 1 Frontend Domain (for strict CORS, e.g. crm.example.com or *)" "*" FRONTEND_ORIGIN
 
-# Generate secrets
-echo -e "\n${CYAN}--> Generating cryptographically secure tokens...${NC}"
-SECRET_KEY=$(openssl rand -hex 32)
-POSTGRES_PWD=$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | head -c 24)
-REDIS_PWD=$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | head -c 24)
+# Generate or preserve existing secrets
+echo -e "\n${CYAN}--> Evaluating security secrets and passwords...${NC}"
+EXISTING_KEY=""
+EXISTING_PG_PWD=""
+EXISTING_REDIS_PWD=""
+if [ -f ".env" ]; then
+    EXISTING_KEY=$(grep "^SECRET_ENCRYPTION_KEY=" .env | cut -d'=' -f2- | tr -d '"' || true)
+    EXISTING_PG_PWD=$(grep "^POSTGRES_PASSWORD=" .env | cut -d'=' -f2- | tr -d '"' || true)
+    EXISTING_REDIS_PWD=$(grep "^REDIS_PASSWORD=" .env | cut -d'=' -f2- | tr -d '"' || true)
+fi
+
+SECRET_KEY="${EXISTING_KEY:-$(openssl rand -hex 32)}"
+POSTGRES_PWD="${EXISTING_PG_PWD:-$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | head -c 24)}"
+REDIS_PWD="${EXISTING_REDIS_PWD:-$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | head -c 24)}"
 
 DETECTED_BACKEND_IP=$(curl -s -4 ifconfig.me || curl -s -4 api.ipify.org || echo "127.0.0.1")
 

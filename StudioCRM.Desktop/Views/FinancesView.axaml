@@ -1,0 +1,306 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:StudioCRM.Desktop.ViewModels"
+             xmlns:models="using:StudioCRM.Core.Models"
+             mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="850"
+             x:Class="StudioCRM.Desktop.Views.FinancesView"
+             x:DataType="vm:FinancesViewModel"
+             Background="#0B0F19">
+
+    <ScrollViewer Padding="28,24">
+        <StackPanel Spacing="24">
+
+            <!-- 1. TOP METRICS CARDS -->
+            <Grid ColumnDefinitions="*,*,*,*">
+                <!-- Card 1: Month Revenue -->
+                <Border Grid.Column="0" Classes="KpiCard" Margin="0,0,12,0">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Выручка за месяц" FontSize="12" Foreground="#94A3B8" />
+                        <TextBlock Text="{Binding MonthRevenue, Converter={StaticResource CurrencyFormatConverter}}"
+                                   FontSize="24" FontWeight="Bold" Foreground="#34D399" />
+                        <TextBlock Text="фактически оплачено" FontSize="11" Foreground="#64748B" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Card 2: Total Revenue -->
+                <Border Grid.Column="1" Classes="KpiCard" Margin="6,0,6,0">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Общая выручка" FontSize="12" Foreground="#94A3B8" />
+                        <TextBlock Text="{Binding TotalRevenue, Converter={StaticResource CurrencyFormatConverter}}"
+                                   FontSize="24" FontWeight="Bold" Foreground="#818CF8" />
+                        <TextBlock Text="за всё время работы" FontSize="11" Foreground="#64748B" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Card 3: Active Contracts -->
+                <Border Grid.Column="2" Classes="KpiCard" Margin="6,0,6,0">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Проекты в работе" FontSize="12" Foreground="#94A3B8" />
+                        <TextBlock Text="{Binding ActiveContractsSum, Converter={StaticResource CurrencyFormatConverter}}"
+                                   FontSize="24" FontWeight="Bold" Foreground="#38BDF8" />
+                        <TextBlock Text="общий объем контрактов" FontSize="11" Foreground="#64748B" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Card 4: Total Receivables -->
+                <Border Grid.Column="3" Classes="KpiCard" Margin="12,0,0,0">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Дебиторская задолженность" FontSize="12" Foreground="#94A3B8" />
+                        <TextBlock Text="{Binding TotalReceivables, Converter={StaticResource CurrencyFormatConverter}}"
+                                   FontSize="24" FontWeight="Bold" Foreground="#F87171" />
+                        <TextBlock Text="остаток долга клиентов" FontSize="11" Foreground="#64748B" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- 2. REZEVRNOE KOPIROVANIE / BACKUP SECTION -->
+            <Border Classes="Card">
+                <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                    <Border Grid.Column="0"
+                            Width="44" Height="44"
+                            CornerRadius="10"
+                            Background="#1E3A8A"
+                            Margin="0,0,16,0"
+                            VerticalAlignment="Center">
+                        <TextBlock Text="💾" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                        <TextBlock Text="Резервное копирование SQLite" FontSize="15" FontWeight="SemiBold" Foreground="#F8FAFC" />
+                        <TextBlock Text="{Binding DbPath, StringFormat='Текущая БД: {0}'}" FontSize="12" Foreground="#94A3B8" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding BackupMessage}"
+                                   FontSize="12"
+                                   Foreground="#34D399"
+                                   IsVisible="{Binding BackupMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Button Classes="Secondary"
+                                Command="{Binding OpenBackupsFolderCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="📁" FontSize="13" VerticalAlignment="Center" />
+                                <TextBlock Text="Папка бэкапов" FontSize="13" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+
+                        <Button Classes="Primary"
+                                Command="{Binding CreateBackupCommand}"
+                                IsEnabled="{Binding !IsBackingUp}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="⚡" FontSize="13" VerticalAlignment="Center" />
+                                <TextBlock Text="Создать резервную копию" FontSize="13" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 3. DEBTORS TABLE -->
+            <Border Classes="Card" Padding="20">
+                <StackPanel Spacing="14">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="Реестр задолженностей по проектам" FontSize="16" FontWeight="Bold" Foreground="#F8FAFC" />
+                            <TextBlock Text="Клиенты и заказы с неоплаченным остатком по смете" FontSize="12" Foreground="#94A3B8" />
+                        </StackPanel>
+
+                        <Button Grid.Column="1"
+                                Classes="Secondary"
+                                Command="{Binding LoadFinancialsCommand}">
+                            <TextBlock Text="🔄 Обновить данные" FontSize="12" />
+                        </Button>
+                    </Grid>
+
+                    <DataGrid ItemsSource="{Binding Debtors}"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              GridLinesVisibility="Horizontal"
+                              RowHeight="48"
+                              MaxHeight="360"
+                              Background="Transparent">
+                        <DataGrid.Columns>
+                            <!-- Order Number -->
+                            <DataGridTemplateColumn Header="Номер" Width="130">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:Order">
+                                        <TextBlock Text="{Binding OrderNumber}"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#818CF8"
+                                                   VerticalAlignment="Center"
+                                                   Margin="8,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Title -->
+                            <DataGridTemplateColumn Header="Проект" Width="*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:Order">
+                                        <TextBlock Text="{Binding Title}"
+                                                   Foreground="#F8FAFC"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Margin="6,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Client -->
+                            <DataGridTemplateColumn Header="Заказчик" Width="200">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:Order">
+                                        <TextBlock Text="{Binding Client.Name}"
+                                                   Foreground="#CBD5E1"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Margin="6,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Total Cost -->
+                            <DataGridTemplateColumn Header="Сумма" Width="120">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:Order">
+                                        <TextBlock Text="{Binding TotalCost, Converter={StaticResource CurrencyFormatConverter}}"
+                                                   Foreground="#F8FAFC"
+                                                   VerticalAlignment="Center"
+                                                   Margin="6,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Paid -->
+                            <DataGridTemplateColumn Header="Оплачено" Width="120">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:Order">
+                                        <TextBlock Text="{Binding PaidAmount, Converter={StaticResource CurrencyFormatConverter}}"
+                                                   Foreground="#34D399"
+                                                   VerticalAlignment="Center"
+                                                   Margin="6,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Debt -->
+                            <DataGridTemplateColumn Header="Остаток долга" Width="130">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:Order">
+                                        <TextBlock Text="{Binding RemainingDebt, Converter={StaticResource CurrencyFormatConverter}}"
+                                                   Foreground="#F87171"
+                                                   FontWeight="Bold"
+                                                   VerticalAlignment="Center"
+                                                   Margin="6,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Actions -->
+                            <DataGridTemplateColumn Header="Действия" Width="110">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:Order">
+                                        <Button Content="Открыть"
+                                                Classes="Secondary"
+                                                Padding="10,4"
+                                                FontSize="12"
+                                                VerticalAlignment="Center"
+                                                HorizontalAlignment="Center"
+                                                Command="{Binding $parent[UserControl].((vm:FinancesViewModel)DataContext).OpenOrderCommand}"
+                                                CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <TextBlock Text="Все обязательства закрыты — должников нет!"
+                               IsVisible="{Binding !Debtors.Count}"
+                               Foreground="#34D399"
+                               FontSize="13"
+                               HorizontalAlignment="Center"
+                               Margin="0,12" />
+                </StackPanel>
+            </Border>
+
+            <!-- 4. RECENT PAYMENTS LOG -->
+            <Border Classes="Card" Padding="20">
+                <StackPanel Spacing="14">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="История последних подтвержденных оплат" FontSize="16" FontWeight="Bold" Foreground="#F8FAFC" />
+                        <TextBlock Text="Поступления на расчетный счет, карты и другие платежные шлюзы" FontSize="12" Foreground="#94A3B8" />
+                    </StackPanel>
+
+                    <DataGrid ItemsSource="{Binding RecentPayments}"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              GridLinesVisibility="Horizontal"
+                              RowHeight="44"
+                              MaxHeight="320"
+                              Background="Transparent">
+                        <DataGrid.Columns>
+                            <!-- Date -->
+                            <DataGridTemplateColumn Header="Дата" Width="110">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:Payment">
+                                        <TextBlock Text="{Binding PaymentDate, Converter={StaticResource DateTimeFormatConverter}}"
+                                                   Foreground="#94A3B8"
+                                                   VerticalAlignment="Center"
+                                                   Margin="8,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Amount -->
+                            <DataGridTemplateColumn Header="Сумма" Width="140">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:Payment">
+                                        <TextBlock Text="{Binding Amount, Converter={StaticResource CurrencyFormatConverter}}"
+                                                   Foreground="#34D399"
+                                                   FontWeight="SemiBold"
+                                                   VerticalAlignment="Center"
+                                                   Margin="6,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Payment Type -->
+                            <DataGridTemplateColumn Header="Способ оплаты" Width="180">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:Payment">
+                                        <TextBlock Text="{Binding PaymentType, Converter={StaticResource PaymentTypeToStringConverter}}"
+                                                   Foreground="#E2E8F0"
+                                                   VerticalAlignment="Center"
+                                                   Margin="6,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Notes -->
+                            <DataGridTemplateColumn Header="Примечание" Width="*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:Payment">
+                                        <TextBlock Text="{Binding Notes}"
+                                                   Foreground="#94A3B8"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Margin="6,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <TextBlock Text="Платежи пока не зафиксированы"
+                               IsVisible="{Binding !RecentPayments.Count}"
+                               Foreground="#64748B"
+                               FontSize="13"
+                               HorizontalAlignment="Center"
+                               Margin="0,12" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
+

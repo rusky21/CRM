@@ -1,0 +1,262 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:StudioCRM.Desktop.ViewModels"
+             xmlns:models="using:StudioCRM.Core.Models"
+             mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
+             x:Class="StudioCRM.Desktop.Views.OrdersView"
+             x:DataType="vm:OrdersViewModel"
+             Background="#0B0F19">
+
+    <Grid RowDefinitions="Auto,Auto,*" Margin="28,24,28,24">
+
+        <!-- TOP METRICS CARDS -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,*,*,*" Margin="0,0,0,24">
+            <!-- Card 1: Total Orders -->
+            <Border Grid.Column="0" Classes="KpiCard" Margin="0,0,12,0">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Всего проектов" FontSize="12" Foreground="#94A3B8" />
+                    <TextBlock Text="{Binding TotalOrdersCount}" FontSize="24" FontWeight="Bold" Foreground="#F8FAFC" />
+                    <TextBlock Text="в базе данных" FontSize="11" Foreground="#64748B" />
+                </StackPanel>
+            </Border>
+
+            <!-- Card 2: Active Projects -->
+            <Border Grid.Column="1" Classes="KpiCard" Margin="6,0,6,0">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="В активной работе" FontSize="12" Foreground="#94A3B8" />
+                    <TextBlock Text="{Binding ActiveOrdersCount}" FontSize="24" FontWeight="Bold" Foreground="#818CF8" />
+                    <TextBlock Text="новые / разработка / тесты" FontSize="11" Foreground="#64748B" />
+                </StackPanel>
+            </Border>
+
+            <!-- Card 3: Active Sum -->
+            <Border Grid.Column="2" Classes="KpiCard" Margin="6,0,6,0">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Бюджет активных" FontSize="12" Foreground="#94A3B8" />
+                    <TextBlock Text="{Binding ActiveOrdersSum, Converter={StaticResource CurrencyFormatConverter}}"
+                               FontSize="24" FontWeight="Bold" Foreground="#34D399" />
+                    <TextBlock Text="общая сумма договоров" FontSize="11" Foreground="#64748B" />
+                </StackPanel>
+            </Border>
+
+            <!-- Card 4: Total Debt -->
+            <Border Grid.Column="3" Classes="KpiCard" Margin="12,0,0,0">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Остаток к доплате (Долг)" FontSize="12" Foreground="#94A3B8" />
+                    <TextBlock Text="{Binding TotalDebtSum, Converter={StaticResource CurrencyFormatConverter}}"
+                               FontSize="24" FontWeight="Bold" Foreground="#F87171" />
+                    <TextBlock Text="дебиторская задолженность" FontSize="11" Foreground="#64748B" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- SEARCH AND FILTER BAR -->
+        <Border Grid.Row="1" Classes="Card" Margin="0,0,0,16" Padding="14,12">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                <!-- Search Box -->
+                <TextBox Grid.Column="0"
+                         Text="{Binding SearchText, Mode=TwoWay}"
+                         PlaceholderText="🔍 Поиск по номеру заказа, проекту или клиенту..."
+                         Background="#0F172A"
+                         BorderBrush="#334155"
+                         CornerRadius="8"
+                         Padding="12,8"
+                         Margin="0,0,12,0" />
+
+                <!-- Status Filter -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,12,0">
+                    <TextBlock Text="Статус:" VerticalAlignment="Center" Foreground="#94A3B8" FontSize="13" />
+                    <ComboBox ItemsSource="{Binding StatusFilters}"
+                              SelectedItem="{Binding SelectedStatusFilter, Mode=TwoWay}"
+                              Width="140"
+                              Background="#0F172A"
+                              BorderBrush="#334155"
+                              CornerRadius="8" />
+                </StackPanel>
+
+                <!-- Refresh Button -->
+                <Button Grid.Column="2"
+                        Classes="Secondary"
+                        Command="{Binding LoadOrdersCommand}"
+                        ToolTip.Tip="Обновить список"
+                        Margin="0,0,8,0">
+                    <TextBlock Text="🔄 Обновить" FontSize="13" />
+                </Button>
+
+                <!-- New Order Button -->
+                <Button Grid.Column="3"
+                        Classes="Primary"
+                        Command="{Binding CreateNewOrderCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="＋" FontWeight="Bold" FontSize="14" VerticalAlignment="Center" />
+                        <TextBlock Text="Создать заказ" FontSize="13" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- ORDERS DATAGRID -->
+        <Border Grid.Row="2" Classes="Card" Padding="0">
+            <Grid>
+                <DataGrid ItemsSource="{Binding FilteredOrders}"
+                          SelectedItem="{Binding SelectedOrder, Mode=TwoWay}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          GridLinesVisibility="Horizontal"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto"
+                          BorderThickness="0"
+                          RowHeight="50"
+                          Background="Transparent">
+
+                    <DataGrid.Columns>
+                        <!-- Order Number -->
+                        <DataGridTemplateColumn Header="Номер" Width="130">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate x:DataType="models:Order">
+                                    <TextBlock Text="{Binding OrderNumber}"
+                                               FontWeight="SemiBold"
+                                               Foreground="#818CF8"
+                                               VerticalAlignment="Center"
+                                               Margin="12,0" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Project Title -->
+                        <DataGridTemplateColumn Header="Проект / Название" Width="*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate x:DataType="models:Order">
+                                    <StackPanel VerticalAlignment="Center" Margin="6,0">
+                                        <TextBlock Text="{Binding Title}"
+                                                   FontWeight="Medium"
+                                                   Foreground="#F8FAFC"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding Notes}"
+                                                   FontSize="11"
+                                                   Foreground="#64748B"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Client -->
+                        <DataGridTemplateColumn Header="Клиент" Width="180">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate x:DataType="models:Order">
+                                    <StackPanel VerticalAlignment="Center" Margin="6,0">
+                                        <TextBlock Text="{Binding Client.Name}"
+                                                   Foreground="#E2E8F0"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding Client.ContactPerson}"
+                                                   FontSize="11"
+                                                   Foreground="#94A3B8" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Total Cost -->
+                        <DataGridTemplateColumn Header="Сумма" Width="120">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate x:DataType="models:Order">
+                                    <TextBlock Text="{Binding TotalCost, Converter={StaticResource CurrencyFormatConverter}}"
+                                               FontWeight="SemiBold"
+                                               Foreground="#F8FAFC"
+                                               VerticalAlignment="Center"
+                                               Margin="6,0" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Paid -->
+                        <DataGridTemplateColumn Header="Оплачено" Width="110">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate x:DataType="models:Order">
+                                    <TextBlock Text="{Binding PaidAmount, Converter={StaticResource CurrencyFormatConverter}}"
+                                               Foreground="#34D399"
+                                               VerticalAlignment="Center"
+                                               Margin="6,0" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Remaining Debt -->
+                        <DataGridTemplateColumn Header="Остаток" Width="110">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate x:DataType="models:Order">
+                                    <TextBlock Text="{Binding RemainingDebt, Converter={StaticResource CurrencyFormatConverter}}"
+                                               Foreground="{Binding RemainingDebt, Converter={StaticResource DebtToBrushConverter}}"
+                                               FontWeight="Medium"
+                                               VerticalAlignment="Center"
+                                               Margin="6,0" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Deadline -->
+                        <DataGridTemplateColumn Header="Дедлайн" Width="110">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate x:DataType="models:Order">
+                                    <TextBlock Text="{Binding Deadline, Converter={StaticResource DateTimeFormatConverter}}"
+                                               Foreground="#94A3B8"
+                                               VerticalAlignment="Center"
+                                               Margin="6,0" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Status Badge -->
+                        <DataGridTemplateColumn Header="Статус" Width="130">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate x:DataType="models:Order">
+                                    <Border Background="{Binding Status, Converter={StaticResource OrderStatusToBackgroundBrushConverter}}"
+                                            CornerRadius="6"
+                                            Padding="8,4"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center"
+                                            Margin="6,0">
+                                        <TextBlock Text="{Binding Status, Converter={StaticResource OrderStatusToStringConverter}}"
+                                                   Foreground="{Binding Status, Converter={StaticResource OrderStatusToBrushConverter}}"
+                                                   FontSize="12"
+                                                   FontWeight="SemiBold" />
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Action Open -->
+                        <DataGridTemplateColumn Header="Действия" Width="100">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate x:DataType="models:Order">
+                                    <Button Content="Открыть"
+                                            Classes="Secondary"
+                                            Padding="10,4"
+                                            FontSize="12"
+                                            VerticalAlignment="Center"
+                                            HorizontalAlignment="Center"
+                                            Command="{Binding $parent[UserControl].((vm:OrdersViewModel)DataContext).OpenOrderCommand}"
+                                            CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <!-- Empty State Message -->
+                <StackPanel IsVisible="{Binding !FilteredOrders.Count}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="10">
+                    <TextBlock Text="🔍" FontSize="36" HorizontalAlignment="Center" />
+                    <TextBlock Text="Заказы не найдены" FontSize="16" FontWeight="SemiBold" Foreground="#94A3B8" HorizontalAlignment="Center" />
+                    <TextBlock Text="Попробуйте изменить параметры поиска или фильтр статуса" FontSize="13" Foreground="#64748B" HorizontalAlignment="Center" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>
+

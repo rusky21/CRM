@@ -3,18 +3,18 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: tg_crm_postgres
+    container_name: studiocrm_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-tg_crm}
+      POSTGRES_USER: ${POSTGRES_USER:-crm_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-studiocrm_secure_password}
+      POSTGRES_DB: ${POSTGRES_DB:-studiocrm_db}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crm_admin} -d ${POSTGRES_DB:-studiocrm_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -34,6 +34,25 @@ services:
       timeout: 5s
       retries: 5
 
+  # ASP.NET Core Main StudioCRM API (port 5000)
+  crm-api:
+    build:
+      context: .
+      dockerfile: StudioCRM.Api/Dockerfile
+    container_name: studiocrm_api
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - ASPNETCORE_URLS=http://+:5000
+      - DatabaseProvider=PostgreSql
+      - ConnectionStrings__PostgreSql=Host=postgres;Port=5432;Database=${POSTGRES_DB:-studiocrm_db};Username=${POSTGRES_USER:-crm_admin};Password=${POSTGRES_PASSWORD:-studiocrm_secure_password}
+      - Logging__LogLevel__Default=Information
+
+  # Multi-Account Telegram CRM Backend (FastAPI + Telethon MTProto)
   backend:
     build:
       context: .
@@ -42,7 +61,7 @@ services:
     restart: unless-stopped
     environment:
       - SECRET_ENCRYPTION_KEY=${SECRET_ENCRYPTION_KEY}
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-tg_crm}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-crm_admin}:${POSTGRES_PASSWORD:-studiocrm_secure_password}@postgres:5432/${POSTGRES_DB:-studiocrm_db}
       - REDIS_URL=redis://redis:6379/0
       - DEFAULT_TELEGRAM_API_ID=${DEFAULT_TELEGRAM_API_ID}
       - DEFAULT_TELEGRAM_API_HASH=${DEFAULT_TELEGRAM_API_HASH}
@@ -50,6 +69,7 @@ services:
       - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
       - TMA_BOT_USERNAME=${TMA_BOT_USERNAME:-StudioCrmAdminBot}
       - TMA_APP_SHORT_NAME=${TMA_APP_SHORT_NAME:-app}
+      - STUDIOCRM_SERVER_URL=${STUDIOCRM_SERVER_URL:-http://crm-api:5000}
     ports:
       - "8000:8000"
     depends_on:
@@ -58,6 +78,7 @@ services:
       redis:
         condition: service_healthy
 
+  # Admin Push Alert & Client Intake Bot (aiogram 3.x)
   bot:
     build:
       context: .
@@ -66,18 +87,20 @@ services:
     restart: unless-stopped
     environment:
       - SECRET_ENCRYPTION_KEY=${SECRET_ENCRYPTION_KEY}
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-tg_crm}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-crm_admin}:${POSTGRES_PASSWORD:-studiocrm_secure_password}@postgres:5432/${POSTGRES_DB:-studiocrm_db}
       - REDIS_URL=redis://redis:6379/0
       - ADMIN_BOT_TOKEN=${ADMIN_BOT_TOKEN}
       - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
       - TMA_BOT_USERNAME=${TMA_BOT_USERNAME:-StudioCrmAdminBot}
       - TMA_APP_SHORT_NAME=${TMA_APP_SHORT_NAME:-app}
+      - STUDIOCRM_SERVER_URL=${STUDIOCRM_SERVER_URL:-http://crm-api:5000}
     depends_on:
       redis:
         condition: service_healthy
       backend:
         condition: service_started
 
+  # Web Reverse Proxy & Mini App Gateway
   nginx:
     image: nginx:alpine
     container_name: tg_crm_nginx

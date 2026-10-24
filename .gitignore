@@ -1,5 +1,5 @@
 # =========================================================================
-# StudioCRM Security & Repository .gitignore
+# StudioCRM Security & Repository .gitignore (Unified .NET & Python/TMA)
 # =========================================================================
 
 # Environment and secrets (CRITICAL: Never commit credentials)
@@ -9,25 +9,40 @@ backend/.env
 !.env.example
 !backend/.env.example
 
+# Local configurations
+appsettings.local.json
+
 # Telegram MTProto session files & databases
 *.session
 *.session-journal
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 studiocrm.db
+studiocrm_server.db
 studiocrm-*-backup.db
+Backups/
+*.backup
 
 # Media cache & dynamic runtime uploads
 media_cache/
 uploads/
 *.log
+[Ll]og/
+[Ll]ogs/
 
-# Binary executables and debug symbol artifacts
+# Binary build artifacts and compiled executables
 *.exe
 *.dll
 *.pdb
+[Bb]in/
+[Oo]bj/
+[Pp]ublish*/
+*.zip
+*.tar.gz
 
 # Frontend build & dependencies
 node_modules/
@@ -49,12 +64,21 @@ venv/
 .coverage.*
 htmlcov/
 
-# Editor and OS system files
-.idea/
+# Visual Studio & IDEs
+.vs/
 .vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
 *.swp
 *.swo
 *~
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Agent runtime artifacts
+.agents/
+.geminiignore

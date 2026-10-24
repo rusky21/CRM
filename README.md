@@ -1,148 +1,142 @@
-# Multi-Account Telegram CRM & Telegram Mini App (TMA)
+# StudioCRM: Enterprise Multi-Account Telegram CRM & Project Management Platform
 
-A production-grade, distributed Telegram CRM engine designed to manage multiple Telegram user accounts (MTProto sessions) concurrently through a 1:1 visual & functional **Telegram Mini App (TMA)** replica with an **Admin Alert Bot (`aiogram 3.x`)**.
+A modern, production-grade CRM platform uniting high-performance **desktop client management** (C# / .NET 10 / Avalonia UI) with a distributed **Multi-Account Telegram CRM** and pixel-perfect **Telegram Mini App (TMA)** powered by FastAPI, Telethon MTProto, Redis Streams, and aiogram 3.x.
 
 ---
 
-## Architecture Overview
+## 🏗️ Architecture Overview
 
 ```mermaid
-flowchart LR
-    Customer["Telegram User"] <-->|MTProto| AccountWorker["Telethon MTProto Pool"]
-    AccountWorker -->|xadd| RedisStream["Redis Streams"]
-    RedisStream --> IngestionConsumer["Inbound Consumer"]
-    IngestionConsumer -->|Upsert| Postgres[("PostgreSQL 16")]
-    IngestionConsumer -->|Pub/Sub| AdminBot["Admin Alert Bot"]
-    IngestionConsumer -->|Pub/Sub| WSGateway["FastAPI WebSocket"]
-    AdminBot -->|Push Alert + Deep Link| AdminTelegram["Admin Mobile"]
-    AdminTelegram -->|TMA Deep Link| MiniApp["Telegram Mini App"]
-    MiniApp <-->|WebSocket| WSGateway
-    WSGateway -->|Dispatch| OutboundDispatcher["Outbound Dispatcher"]
-    OutboundDispatcher -->|send_message| AccountWorker
+flowchart TD
+    subgraph Telegram_Ecosystem["Telegram Ecosystem"]
+        TGUsers["Clients & Leads"] <-->|MTProto Cloud| AccountWorker["Telethon MTProto Pool"]
+        AdminTG["Admin Mobile"] <-->|Push Alerts & /new_client| AdminBot["Admin Alert Bot (aiogram 3.x)"]
+        AdminTG <-->|Interactive TMA| MiniApp["Telegram Mini App (React + TS)"]
+    end
+
+    subgraph Streaming_Engine["Real-Time Event Bus"]
+        AccountWorker -->|xadd stream:inbound_events| RedisStream["Redis Streams"]
+        RedisStream --> InboundConsumer["Inbound Event Consumer"]
+        InboundConsumer -->|Pub/Sub| AdminBot
+        InboundConsumer -->|Pub/Sub| WSGateway["FastAPI WebSocket Gateway"]
+        MiniApp <-->|WebSocket wss://| WSGateway
+        WSGateway -->|Outbound Dispatcher| AccountWorker
+    end
+
+    subgraph Core_Storage["Persistent Storage & APIs"]
+        InboundConsumer -->|Store dialogues & msgs| Postgres[("PostgreSQL 16")]
+        WSGateway -->|Create Orders & Sync Leads| CRMBridge["StudioCRM Bridge"]
+        CRMBridge <-->|HTTP REST Port 5000| DotNetAPI["ASP.NET Core API (StudioCRM.Api)"]
+        DotNetAPI <--> Postgres
+        CRMBridge -.->|Offline Fallback| SQLite[("studiocrm.db")]
+    end
+
+    subgraph Desktop_Workstations["Desktop Workstations"]
+        DesktopApp["StudioCRM.Desktop (Avalonia UI / MVVM)"] <-->|Sync Port 5000| DotNetAPI
+    end
 ```
 
 ---
 
-## 1. Quickstart & Environment Setup
+## 🌟 Key Capabilities
 
-### 1.1 Configure Environment Variables
-Copy `backend/.env.example` to `.env`:
-```bash
-cp backend/.env.example .env
-```
+### 1. Telegram Multi-Account CRM & Telegram Mini App (TMA)
+* **Dedicated Account Hub:** Manage 50+ concurrent Telegram accounts with isolated sessions and individual SOCKS5 proxies.
+* **1:1 Native Telegram Web Replica:** Dark theme, custom doodle wallpaper, rounded message bubbles with SVG tails, and double checkmarks (`✓✓`).
+* **Bidirectional MTProto Sync:** Outbound/inbound real-time typing indicators, cloud message editing, revoke-deletion, and photo caching.
+* **In-Chat Deal Engine:** Create orders directly from any Telegram conversation (`💼 Создать заказ`) with instant order number generation (`ORD-2026-XXX`).
+* **Clients Contact Directory:** Centralized contact book with revenue metrics, active deals, and instant click-to-chat.
+* **Circuit Breakers & Anti-Flood:** Automatic `FloodWait` handling without thread locks, background proxy health checking, and session auto-recovery.
 
-Edit `.env` with your production secrets:
-```env
-# AES-256-GCM 32-byte Encryption Key (Generate via: openssl rand -hex 32)
-SECRET_ENCRYPTION_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+### 2. Admin Alert & Client Intake Bot (`aiogram 3.x`)
+* **Instant Inbound Notifications:** Push alerts with direct deep-links (`startapp=chat_{acc}_{peer}`).
+* **Interactive `/new_client` FSM:** 5-step interactive intake wizard for rapid client and deal onboarding from mobile.
+* **Quick Commands:**
+  * `/clients` — View top clients and revenue summary directly in chat.
+  * `/sync_24h` — Force-sync inbound Telegram contacts into StudioCRM.
+  * `/status` — System gateway and database diagnostic check.
 
-# Telegram Client Fallback App Credentials (from https://my.telegram.org)
-DEFAULT_TELEGRAM_API_ID=1234567
-DEFAULT_TELEGRAM_API_HASH="your_telegram_api_hash_here"
-
-# Admin Alert Bot Credentials (from @BotFather)
-ADMIN_BOT_TOKEN="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
-ADMIN_CHAT_ID=987654321
-
-# Mini App Configuration
-TMA_BOT_USERNAME="YourAdminBot"
-TMA_APP_SHORT_NAME="app"
-
-# Database & Redis URLs
-DATABASE_URL="postgresql+asyncpg://postgres:postgres@postgres:5432/tg_crm"
-REDIS_URL="redis://redis:6379/0"
-```
+### 3. StudioCRM Desktop & ASP.NET Core API (.NET 10 / Avalonia UI)
+* Cross-platform desktop interface for Windows, Linux, and macOS.
+* Order stages tracking, services catalog, and financial accounting (invoices, payments, receivables).
+* Seamless offline fallback with local SQLite persistence when remote server is unreachable.
 
 ---
 
-## 2. Launching the Production Stack (Docker Compose)
+## 🚀 Quickstart: Ubuntu 24.04 LTS Automated Deployment
 
-Launch the entire stack with a single command:
+Deploy the entire production stack (PostgreSQL, Redis, ASP.NET Core API, FastAPI Telegram Backend, Admin Bot, Nginx) with our interactive setup wizard:
+
 ```bash
-docker-compose up --build -d
+# 1. Clone repository
+git clone https://github.com/rusky21/CRM.git
+cd CRM
+
+# 2. Run automated installer
+sudo bash install_ubuntu24.sh
 ```
 
-### Services Started:
+The script automatically:
+1. Validates the Ubuntu 24.04 environment.
+2. Installs Docker CE, Docker Compose plugin, and security tools.
+3. Guides you through setting up Telegram credentials and bot tokens.
+4. Auto-generates cryptographically secure 256-bit AES keys and random database passwords.
+5. Configures UFW firewall rules (SSH 22, HTTP 80, HTTPS 443).
+6. Builds and boots all 6 Docker containers in background.
+
+---
+
+## 🐳 Docker Compose Stack
+
 | Service | Container Name | Port | Description |
 | :--- | :--- | :--- | :--- |
-| **PostgreSQL** | `tg_crm_postgres` | `5432` | Relational storage for accounts, dialogues, messages, proxies. |
-| **Redis** | `tg_crm_redis` | `6379` | Inbound event streams (`stream:inbound_events`) and Pub/Sub fanout. |
-| **Backend** | `tg_crm_backend` | `8000` | FastAPI REST API, WebSocket gateway, MTProto connection pool. |
-| **Admin Bot** | `tg_crm_admin_bot` | - | `aiogram 3.x` push notification daemon with TMA deep-linking. |
-| **Nginx** | `tg_crm_nginx` | `80`, `443` | Reverse proxy with SSL termination and WebSocket `Upgrade` headers. |
+| **PostgreSQL** | `studiocrm_postgres` | `5432` | Relational database for CRM entities, accounts, and chats. |
+| **Redis** | `tg_crm_redis` | `6379` | High-throughput event streams (`stream:inbound_events`) and Pub/Sub. |
+| **StudioCRM API** | `studiocrm_api` | `5000` | ASP.NET Core REST API serving clients, orders, and finances. |
+| **Telegram Backend** | `tg_crm_backend` | `8000` | FastAPI MTProto pool, WebSocket gateway, and CRM bridge. |
+| **Admin Bot** | `tg_crm_admin_bot` | - | `aiogram 3.x` alerts and `/new_client` intake daemon. |
+| **Nginx** | `tg_crm_nginx` | `80`, `443` | Reverse proxy and Telegram Mini App web server. |
 
 ---
 
-## 3. Registering Telegram Accounts
-
-Accounts can be ingested into the pool either via existing `StringSession` strings or interactively.
-
-### Option A: Via Python CLI / Script
-```python
-from backend.app.db.session import async_session_factory
-from backend.app.models.account import Account, AccountStatus
-from backend.app.core.security import encrypt_session_string
-from backend.app.core.config import settings
-
-async def add_account():
-    async with async_session_factory() as session:
-        # Encrypt the raw Telethon string session with AES-256-GCM
-        raw_session = "1ApWapzMBu3...YourTelethonStringSession..."
-        encrypted = encrypt_session_string(raw_session, settings.SECRET_ENCRYPTION_KEY)
-
-        acc = Account(
-            phone="+12025550199",
-            title="Sales Session #1",
-            status=AccountStatus.ACTIVE,
-            encrypted_session=encrypted,
-            device_fingerprint={"device_model": "iPhone 15 Pro", "app_version": "10.14.1"}
-        )
-        session.add(acc)
-        await session.commit()
-```
-
----
-
-## 4. Configuring the Telegram Mini App in @BotFather
+## 📱 BotFather Configuration for Mini App
 
 1. Open [@BotFather](https://t.me/BotFather) in Telegram.
-2. Send `/newapp` and select your bot (`@YourAdminBot`).
+2. Send `/newapp` and select your bot (`@YourBotUsername`).
 3. **Title:** `StudioCRM Workspace`
 4. **Description:** `Multi-Account Telegram Customer Relationship Management`
-5. **Short Name:** Set to `app` (or your configured `TMA_APP_SHORT_NAME`).
-6. **Web App URL:** Enter your deployed HTTPS URL:  
-   `https://your-domain.com/app/preview.html` (or `https://your-domain.com/app/`).
-7. BotFather will provide your direct launch link:  
-   `https://t.me/YourAdminBot/app`
+5. **Short Name:** `app`
+6. **Web App URL:** `https://your-domain-or-ip/app/preview.html`
+7. Direct launch link: `https://t.me/YourBotUsername/app`
 
 ---
 
-## 5. End-to-End Operational Walkthrough
+## 📂 Repository Structure
 
-1. **Incoming Message:**  
-   A client sends a Telegram message to one of your connected accounts (`+12025550199`).
-2. **Instant MTProto Catch & Stream Ingestion:**  
-   Telethon catches `events.NewMessage` $\rightarrow$ pushes to Redis Stream `stream:inbound_events`.
-3. **Database Upsert & Notification:**  
-   Consumer upserts the conversation thread in Postgres (increments `unread_count`) and publishes an alert to `channel:admin_alerts`.
-4. **Admin Mobile Push:**  
-   Admin Bot immediately alerts you:
-   ```text
-   📩 Новое входящее сообщение!
-
-   👤 Аккаунт: Sales Session #1 (+12025550199)
-   💬 От: Dmitry Sokolov (@dmitry_medicus) [ID: 101]
-   📝 Текст: «Can we schedule a call regarding the audit?»
-   ```
-   **Button:** `[💬 Ответить в Mini App]`
-5. **Instant Chat Opening:**  
-   Tapping the button launches the Mini App inside Telegram, automatically navigates to that account, and opens the chat feed.
-6. **Replying via TMA:**  
-   Admin types a response and hits Send $\rightarrow$ Transmitted via WebSocket Gateway $\rightarrow$ Outbound Dispatcher $\rightarrow$ Sent through MTProto to the customer with optimistic double checkmarks (`✓✓`).
-
----
-
-## 6. Circuit Breakers & Proxy Resilience
-
-* **Automatic FloodWait Cooldown:** If Telegram issues a rate-limit (`FloodWaitError`), the account is placed on an automatic cooldown (`FLOOD_WAIT`) and automatically unlocked when the timer expires without crashing the daemon.
-* **Proxy Hot-Swapping:** The background `ProxyFailoverMonitor` continuously measures SOCKS5/HTTP socket latencies. If a proxy fails 3 consecutive health checks, affected accounts are hot-swapped to an active backup proxy without terminating user sessions.
+```
+CRM/
+├── StudioCRM.Api/          # ASP.NET Core REST API (port 5000)
+├── StudioCRM.Core/         # Domain entities (Order, Client, Payment, ServiceItem)
+├── StudioCRM.Data/         # Entity Framework Core context & repositories
+├── StudioCRM.Desktop/      # Desktop client (Avalonia UI / MVVM)
+├── StudioCRM.Tests/        # Unit & integration test suites
+│
+├── backend/                # Multi-Account Telegram CRM (FastAPI + Telethon)
+│   ├── app/api/v1/         # REST & WebSocket endpoints (accounts, dialogues, orders, clients)
+│   ├── app/core/           # Security (AES-256-GCM), Telegram auth, circuit breakers
+│   ├── app/models/         # SQLAlchemy models (Account, Dialogue, Message, Order, Proxy)
+│   └── app/services/       # MTProto pool manager, CRM bridge, lead sync, event pipelines
+│
+├── bot/                    # Admin Alert & FSM Intake Bot (aiogram 3.x)
+│   ├── handlers/           # /new_client intake FSM, /clients, /sync_24h, /start
+│   └── main.py             # Bot runner and Redis Pub/Sub listener
+│
+├── frontend/               # Telegram Mini App Frontend (React + Vite + TailwindCSS)
+│   ├── preview.html        # Interactive standalone Web App preview (port 3000)
+│   └── src/components/     # 1:1 Telegram Web chat components, Account Hub, CRM Book
+│
+├── deploy/                 # Dockerfiles & Nginx reverse proxy configuration
+├── scripts/                # Automated verification and testing scripts
+├── install_ubuntu24.sh     # Production deployment wizard for Ubuntu 24.04 LTS
+└── docker-compose.yml      # Multi-container orchestration stack
+```
